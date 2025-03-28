@@ -1,0 +1,49 @@
+Episode 1, Reward:2133.47, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.07
+Episode 2, Reward:2137.55, Noise:0.995, epsilon: 1.000, aloss:-0.684, closs: 82.654, time: 8.03
+Episode 3, Reward:2147.92, Noise:0.990, epsilon: 0.999, aloss:-6.778, closs: 113.625, time: 10.77
+Episode 4, Reward:2123.40, Noise:0.985, epsilon: 0.999, aloss:-19.144, closs: 112.383, time: 10.73
+Episode 5, Reward:2101.66, Noise:0.980, epsilon: 0.998, aloss:-37.211, closs: 108.207, time: 10.87
+Episode 6, Reward:2135.24, Noise:0.975, epsilon: 0.998, aloss:-60.469, closs: 105.347, time: 10.90
+Episode 7, Reward:2142.67, Noise:0.970, epsilon: 0.997, aloss:-89.156, closs: 97.630, time: 10.86
+Episode 8, Reward:2134.44, Noise:0.966, epsilon: 0.997, aloss:-123.130, closs: 91.031, time: 10.97
+Episode 9, Reward:2136.88, Noise:0.961, epsilon: 0.996, aloss:-162.279, closs: 83.866, time: 11.01
+Episode 10, Reward:2133.05, Noise:0.956, epsilon: 0.996, aloss:-206.650, closs: 75.684, time: 11.24
+Episode 11, Reward:2122.71, Noise:0.951, epsilon: 0.995, aloss:-256.203, closs: 67.688, time: 10.91
+Episode 12, Reward:2130.05, Noise:0.946, epsilon: 0.995, aloss:-310.703, closs: 59.802, time: 10.88
+Episode 13, Reward:2120.38, Noise:0.942, epsilon: 0.994, aloss:-370.381, closs: 50.584, time: 11.16
+Episode 14, Reward:2142.65, Noise:0.937, epsilon: 0.994, aloss:-435.074, closs: 41.925, time: 11.12
+Episode 15, Reward:2123.74, Noise:0.932, epsilon: 0.993, aloss:-504.699, closs: 33.403, time: 11.09
+Episode 16, Reward:2149.15, Noise:0.928, epsilon: 0.993, aloss:-579.473, closs: 25.669, time: 10.94
+Episode 17, Reward:2135.20, Noise:0.923, epsilon: 0.992, aloss:-659.262, closs: 19.253, time: 10.98
+Episode 1, Reward:2141.34, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.08
+Episode 1, Reward:2146.10, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.07
+Episode 2, Reward:2133.59, Noise:0.995, epsilon: 1.000, aloss:-0.707, closs: 82.943, time: 8.15
+Episode 3, Reward:2147.92, Noise:0.990, epsilon: 0.999, aloss:-6.753, closs: 114.265, time: 11.13
+Episode 4, Reward:2137.77, Noise:0.985, epsilon: 0.999, aloss:-18.771, closs: 113.636, time: 10.85
+Episode 5, Reward:2128.27, Noise:0.980, epsilon: 0.998, aloss:-36.462, closs: 109.813, time: 10.91
+Episode 6, Reward:2147.82, Noise:0.975, epsilon: 0.998, aloss:-59.676, closs: 109.203, time: 10.87
+Episode 7, Reward:2144.16, Noise:0.970, epsilon: 0.997, aloss:-88.225, closs: 98.784, time: 10.89
+Episode 8, Reward:2133.78, Noise:0.966, epsilon: 0.997, aloss:-122.274, closs: 91.313, time: 10.96
+Episode 9, Reward:2139.11, Noise:0.961, epsilon: 0.996, aloss:-161.450, closs: 85.715, time: 11.01
+Episode 10, Reward:2133.71, Noise:0.956, epsilon: 0.996, aloss:-205.703, closs: 77.092, time: 11.19
+Episode 1, Reward:2141.32, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.07
+Episode 1, Reward:2085.68, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.07
+Episode 2, Reward:1327.78, Noise:0.995, epsilon: 1.000, aloss:-0.172, closs: 61.881, time: 4.00
+Episode 3, Reward:2087.21, Noise:0.990, epsilon: 0.999, aloss:-3.720, closs: 109.460, time: 10.89
+Episode 4, Reward:1309.11, Noise:0.985, epsilon: 0.999, aloss:-11.365, closs: 107.720, time: 7.28
+Episode 5, Reward:2089.21, Noise:0.980, epsilon: 0.998, aloss:-23.101, closs: 106.609, time: 10.96
+Episode 6, Reward:2095.12, Noise:0.975, epsilon: 0.998, aloss:-42.373, closs: 104.540, time: 10.94
+Episode 7, Reward:1308.77, Noise:0.970, epsilon: 0.997, aloss:-61.802, closs: 103.066, time: 6.76
+Episode 8, Reward:2091.23, Noise:0.966, epsilon: 0.997, aloss:-84.986, closs: 107.277, time: 11.25
+Episode 9, Reward:2095.55, Noise:0.961, epsilon: 0.996, aloss:-118.175, closs: 110.846, time: 11.17
+Episode 10, Reward:2095.07, Noise:0.956, epsilon: 0.996, aloss:-156.499, closs: 121.028, time: 11.06
+Episode 1, Reward:2089.53, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.06
+Episode 2, Reward:2089.53, Noise:0.995, epsilon: 1.000, aloss:-0.685, closs: 79.757, time: 7.99
+Episode 3, Reward:2089.53, Noise:0.990, epsilon: 0.999, aloss:-6.932, closs: 108.494, time: 11.20
+Episode 4, Reward:2089.53, Noise:0.985, epsilon: 0.999, aloss:-19.655, closs: 105.696, time: 11.50
+Episode 5, Reward:2087.94, Noise:0.980, epsilon: 0.998, aloss:-37.984, closs: 101.955, time: 11.06
+Episode 6, Reward:2089.53, Noise:0.975, epsilon: 0.998, aloss:-61.637, closs: 97.685, time: 11.13
+Episode 7, Reward:2089.59, Noise:0.970, epsilon: 0.997, aloss:-90.608, closs: 91.897, time: 11.29
+Episode 8, Reward:2089.57, Noise:0.966, epsilon: 0.997, aloss:-124.773, closs: 85.367, time: 11.65
+Episode 9, Reward:2089.43, Noise:0.961, epsilon: 0.996, aloss:-164.006, closs: 79.704, time: 11.37
+Episode 10, Reward:2089.62, Noise:0.956, epsilon: 0.996, aloss:-208.379, closs: 70.792, time: 11.21

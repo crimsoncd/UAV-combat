@@ -1,0 +1,6 @@
+Episode 1, Reward:2118.34, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.08
+Episode 2, Reward:2121.00, Noise:0.995, epsilon: 1.000, aloss:-0.619, closs: 84.617, time: 86.39
+Episode 3, Reward:2099.36, Noise:0.990, epsilon: 0.999, aloss:-5.796, closs: 118.291, time: 118.03
+Episode 4, Reward:2118.88, Noise:0.985, epsilon: 0.999, aloss:-16.882, closs: 119.824, time: 114.18
+Episode 5, Reward:2109.51, Noise:0.980, epsilon: 0.998, aloss:-33.063, closs: 118.344, time: 115.73
+Episode 6, Reward:2102.74, Noise:0.975, epsilon: 0.998, aloss:-56.039, closs: 115.490, time: 119.51
