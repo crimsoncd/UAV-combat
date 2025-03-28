@@ -17,10 +17,20 @@ class Drone:
         self.y = y
         self.alive = True
         self.fire_cooltime = 0
-        self.orientation = 0   # 0~7
+        self.max_speed = 5
+        self.vx = 0
+        self.vy = 0
+        self.orientation = 0
 
-    def _set_orientation(self, d):
-        self.orientation = int(d)
+    def _update(self, sa, ca, vs):
+
+        vs = 0 if vs<0 else vs
+        self.vx = self.max_speed * vs * sa
+        self.vy = self.max_speed * vs * ca
+
+        self.x += self.vx
+        self.y += self.vy
+        self.orientation = self.vy / self.vx if self.vx!=0 else 999
 
 class Missile:
     def __init__(self, idx, teamcode):
@@ -28,6 +38,8 @@ class Missile:
         self.exist = False
         self.x = 0
         self.y = 0
+        self.vx = 0
+        self.vy = 0
         self.orientation = 0
         self.teamcode = teamcode
         self.speed = 12
@@ -40,21 +52,25 @@ class Missile:
         self.y = 0
         self.orientation = 0
         self.life = 0
+        self.vx = 0
+        self.vy = 0
 
     def _update(self):
         if self.exist:
-            self.x += self.speed * math.cos(2*math.pi*self.orientation/8)
-            self.y += self.speed * math.sin(2*math.pi*self.orientation/8)
+            self.x += self.speed * self.vx
+            self.y += self.speed * self.vy
             self.life -= 1
             if self.life <= 0:
                 self._reset()
         # print("Missile index", self.id, " state:", self.exist)
 
-    def _shootout(self, start_x, start_y, orientation):
+    def _shootout(self, start_x, start_y, vx, vy):
         self.exist = True
         self.x = start_x
         self.y = start_y
-        self.orientation = orientation
+        self.vx = vx
+        self.vy = vy
+        self.orientation = self.vy / self.vx if self.vx!=0 else 999
         self.life = self.lifelong
 
     def _collide(self):
@@ -68,6 +84,7 @@ class BattleEnv:
         self.total_agents = red_agents + blue_agents
         self.map_size = (750, 750)
         self.drone_speed = 3
+        self.max_speed = 5
         self.missile_speed = 8
         self.fire_cooldown = 30
         self.missile_ttl = 30
@@ -231,26 +248,15 @@ class BattleEnv:
             if not drone.alive:
                 continue
 
-            # 0: do nothing
-            # 1~8: change direction
-            # 9~11 shoot
-            step_action = rewind(actions[idx], 0, 11, True)
-            action_shoot = True if step_action>=9 else False
-            if step_action>=1 and step_action<=8:
-                drone._set_orientation(step_action - 1)
-            if action_shoot:
-                action_shootdi = step_action - 9
-            
-            if step_action>=1 and step_action<=8:
+            # [sin alpha, cos alpha, velosity scale, shoot]
+            sa, ca, vs, sh = actions[idx]
+            action_shoot = True if sh>0 else False
 
-                # 解析动作（连续动作空间）
-                angle = 2 * drone.orientation * math.pi / 8
-                dx = math.cos(angle) * self.drone_speed
-                dy = math.sin(angle) * self.drone_speed
-                
-                # 更新位置
-                drone.x = float(np.clip(drone.x + dx, 0, self.map_size[0]))
-                drone.y = float(np.clip(drone.y + dy, 0, self.map_size[1]))
+            drone._update(sa, ca, vs)
+            
+            # 出地图边界
+            if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
+                drone.alive = False
 
             # 检查碰撞
             for other_idx, other_drone in enumerate(self.drones):
@@ -260,8 +266,7 @@ class BattleEnv:
             
             # 处理发射
             if action_shoot and drone.fire_cooltime <= 0:
-                missile_orientation = rewind(drone.orientation + action_shootdi - 1, 0, 7, True)
-                self.missiles[idx]._shootout(drone.x, drone.y, int(missile_orientation))
+                self.missiles[idx]._shootout(drone.x, drone.y, drone.vx, drone.vy)
                 drone.fire_cooltime = self.fire_cooldown
             
             if drone.fire_cooltime > 0:
@@ -306,22 +311,7 @@ class BattleEnv:
         
         return self._get_state(), rewards, done, {}
     
-    def set_state(self, state):
-        drone_states = state[:len(state)//2]
-        missile_states = state[len(state)//2:]
-        for idx, drone in enumerate(self.drones):
-            original_x= drone.x
-            original_y = drone.y
-            drone.x = drone_states[idx*4 + 0]
-            drone.y = drone_states[idx*4 + 1]
-            drone.alive = drone_states[idx*4 + 2]
-            drone.fire_cooltime = drone_states[idx*4 + 3]
-            drone.orientation = np.floor( ( np.arctan2(drone.y-original_y, drone.x-original_x) / np.pi + 1) * 4 ) 
-        for idx, missile in enumerate(self.missiles):
-            missile.x = missile_states[idx*4 + 0]
-            missile.y = missile_states[idx*4 + 1]
-            missile.orientation = missile_states[idx*4 + 2]
-            missile.exist = missile_states[idx*4 + 3]
+
 
     def render(self):
         """可视化"""
@@ -342,7 +332,8 @@ class BattleEnv:
             color = self.color_red_team if drone.team == 'red' else self.color_blue_team
             # pygame.draw.circle(self.screen, color, (int(drone.x), int(drone.y)), 10)
             # print(drone.orientation)
-            rotated_img = pygame.transform.rotate(self.drone_img,  -(drone.orientation+2) * 45)  # 转换为顺时针旋转
+            rotation = np.arctan2(drone.vy, drone.vx)
+            rotated_img = pygame.transform.rotate(self.drone_img, rotation*360 - 90)  # 转换为顺时针旋转
             rect = rotated_img.get_rect(center=(drone.x, drone.y))
             self.screen.blit(rotated_img, rect)
             # pygame.draw.circle(self.screen, color, (drone.x, drone.y), rect.width//2 + 5, 2 ) # 线宽)
@@ -365,19 +356,27 @@ class BattleEnv:
 
 # 测试代码
 if __name__ == "__main__":
-    env = BattleEnv(red_agents=1, blue_agents=1)
+    env = BattleEnv(red_agents=1, blue_agents=1, auto_record=False)
     state = env.reset()
+
+    step = 0
     
-    while True:
+    while True and step<500:
         # 生成随机动作（连续动作空间）
         actions = []
-        for unit in range(10):
-            # action.append(np.random.randint(0, 8))
-            action = np.random.randint(0, 12)
-            actions.append(action)
+        actions.append([1, 1, 1, 1])
+        for unit in range(1):
+            drone_action = []
+            for i in range(4):
+                a = np.random.random() * 2 - 1
+                drone_action.append(a)
+            actions.append(drone_action)
+        
+        # print("actions:", actions)
         
         # 执行动作
         next_state, rewards, done, _ = env.step(actions)
+        step += 1
         
         # 渲染
         env.render()
