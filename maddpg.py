@@ -39,7 +39,8 @@ class Actor(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(64, 12) 
+            nn.Linear(64, 4),
+            nn.Tanh() 
         )
         self.to(device)
 
@@ -48,12 +49,13 @@ class Actor(nn.Module):
         # state = state.to(device)
         # out, _ = self.lstm(state)
         # logits = self.net(out)
-        logits = self.net(state)
-        action = gumbel_softmax(logits, tau=tau, hard=hard)
-        out = torch.argmax(action, dim=-1, keepdim=True)  # 训练时返回soft采样，测试时返回hard
-        if r<tau:
-            return torch.randint(0, 12, out.shape).cpu()
-        return out.cpu()
+        # logits = self.net(state)
+        # action = gumbel_softmax(logits, tau=tau, hard=hard)
+        # out = torch.argmax(action, dim=-1, keepdim=True)  # 训练时返回soft采样，测试时返回hard
+        # if r<tau:
+        #     return torch.randint(0, 12, out.shape).cpu()
+        # return out.cpu()
+        return self.net(state).cpu()
     
 
 # Critic网络：输入全局状态+所有智能体动作
@@ -99,7 +101,7 @@ class MADDPG:
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())
-        self.action_dim = 1
+        self.action_dim = 4
         
         # Initialize networks
         self.actors = [Actor(self.state_dim, self.action_dim).to(device) for _ in range(self.num_agents)]
@@ -140,13 +142,19 @@ class MADDPG:
         actions = []
         explore = np.random.rand()
         # state_tensor = torch.FloatTensor(state).unsqueeze(0)
+        # for i in range(self.num_agents):
+        #     if explore <= self.epsilon:
+        #         action = self.env.induce_step(i)
+        #     else:
+        #         obs = self.env._get_obs(i)
+        #         obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+        #         action = self.actors[i](obs_tensor, tau=self.tau)[0].squeeze()
+        #     actions.append(action)
+        # print(actions)
         for i in range(self.num_agents):
-            if explore <= self.epsilon:
-                action = self.env.induce_step(i)
-            else:
-                obs = self.env._get_obs(i)
-                obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-                action = self.actors[i](obs_tensor, tau=self.tau)[0].squeeze()
+            obs = self.env._get_obs(i)
+            obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+            action = self.actors[i](obs_tensor, tau=self.tau)[0].squeeze().detach().numpy()
             actions.append(action)
         # print(actions)
         return actions
@@ -172,6 +180,7 @@ class MADDPG:
                     else self.target_actors[j](next_states).detach().to(device)
                     for j in range(self.num_agents)
                 ], dim=-1)
+                # print(next_states.shape, target_acts.shape)
                 target_q = self.target_critics[i](next_states, target_acts)
                 target_q = rewards[:, i].unsqueeze(1) + (1 - dones) * self.gamma * target_q
             
@@ -251,8 +260,9 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
         
         for _ in range(max_steps):
             actions = agent.act(state)
-            # next_state, rewards, done, _ = env.step(actions)
-            next_state, rewards, done, _ = env.step([a.cpu() if type(a)!=int else a for a in actions])
+            # print(actions)
+            next_state, rewards, done, _ = env.step(actions)
+            # next_state, rewards, done, _ = env.step([a.cpu() if type(a)!=int else a for a in actions])
             film_record.append(next_state.tolist())
 
             if is_render:

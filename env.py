@@ -25,6 +25,9 @@ class Drone:
     def _update(self, sa, ca, vs):
 
         vs = 0 if vs<0 else vs
+        base = sa**2 + ca**2
+        sa = sa / base
+        ca = ca / base
         self.vx = self.max_speed * vs * sa
         self.vy = self.max_speed * vs * ca
 
@@ -197,6 +200,8 @@ class BattleEnv:
         self.records.append(frame)
 
     def save_and_clear(self, epoch_num, record_path):
+        if not self.auto_record:
+            return
         epoch_record = {
             "epoch": epoch_num,
             "frames": self.records
@@ -332,8 +337,8 @@ class BattleEnv:
             color = self.color_red_team if drone.team == 'red' else self.color_blue_team
             # pygame.draw.circle(self.screen, color, (int(drone.x), int(drone.y)), 10)
             # print(drone.orientation)
-            rotation = np.arctan2(drone.vy, drone.vx)
-            rotated_img = pygame.transform.rotate(self.drone_img, rotation*360 - 90)  # 转换为顺时针旋转
+            rotation = np.arctan2(-drone.vy, drone.vx)
+            rotated_img = pygame.transform.rotate(self.drone_img, rotation*180/np.pi - 90)  # 转换为顺时针旋转
             rect = rotated_img.get_rect(center=(drone.x, drone.y))
             self.screen.blit(rotated_img, rect)
             # pygame.draw.circle(self.screen, color, (drone.x, drone.y), rect.width//2 + 5, 2 ) # 线宽)
@@ -364,7 +369,7 @@ if __name__ == "__main__":
     while True and step<500:
         # 生成随机动作（连续动作空间）
         actions = []
-        actions.append([1, 1, 1, 1])
+        actions.append([0, -1, 0.8, 1])
         for unit in range(1):
             drone_action = []
             for i in range(4):
