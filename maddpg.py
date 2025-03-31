@@ -15,6 +15,7 @@ import time
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
+ACTION_DIMENSION = 3
 
 
 def gumbel_softmax(logits, tau=1.0, hard=False):
@@ -39,13 +40,13 @@ class Actor(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(64, 4),
+            nn.Linear(64, ACTION_DIMENSION),
             nn.Tanh() 
         )
         self.to(device)
 
     def forward(self, state, tau=0.08, hard=True):
-        r = np.random.rand()
+        # r = np.random.rand()
         # state = state.to(device)
         # out, _ = self.lstm(state)
         # logits = self.net(out)
@@ -101,7 +102,7 @@ class MADDPG:
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())
-        self.action_dim = 4
+        self.action_dim = ACTION_DIMENSION
         
         # Initialize networks
         self.actors = [Actor(self.state_dim, self.action_dim).to(device) for _ in range(self.num_agents)]

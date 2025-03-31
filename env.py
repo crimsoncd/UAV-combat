@@ -8,32 +8,51 @@ from copy import deepcopy
 import json
 from env_utils import DroneReward, rewind, nearest_direction
 
+
+MAX_SPEED = 8
+MAX_ANGLE_SPEED = np.pi / 8
+MAX_ACCELERATE = 4
+MAX_ANGLE_ACCE = np.pi / 16
+
+
 class Drone:
     def __init__(self, drone_id, team, x, y):
+        # 固定量
         self.id = drone_id
         self.team = team  # 'red' 或 'blue'
         self.teamcode = 0 if team=='red' else 1
+
+        # 环境量
+        self.fire_cooltime = 0
+        self.alive = True
+
+        # 状态量: x, y, alpha, v, w
         self.x = x
         self.y = y
-        self.alive = True
-        self.fire_cooltime = 0
-        self.max_speed = 5
-        self.vx = 0
-        self.vy = 0
         self.orientation = 0
+        self.v = 0
+        self.w = 0
 
-    def _update(self, sa, ca, vs):
+    def _update(self, a, phi):
 
-        vs = 0 if vs<0 else vs
-        base = sa**2 + ca**2
-        sa = sa / base
-        ca = ca / base
-        self.vx = self.max_speed * vs * sa
-        self.vy = self.max_speed * vs * ca
+        # a, phi: accelerate, angle accelerate
+        self.v += np.clip(a, -MAX_ACCELERATE, MAX_ACCELERATE)
+        self.v = np.clip(self.v, -MAX_SPEED, MAX_SPEED)
+        self.w += np.clip(phi, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+        self.w = np.clip(self.w, -MAX_ANGLE_SPEED, MAX_ANGLE_SPEED)
 
-        self.x += self.vx
-        self.y += self.vy
-        self.orientation = self.vy / self.vx if self.vx!=0 else 999
+        # Formalize
+        self.v = float(self.v)
+        self.w = float(self.w)
+
+        # alpha' = alpha + w * t
+        self.orientation += self.w
+
+        # Change in position
+        self.x += self.v * np.cos(self.orientation)
+        self.y += self.v * np.sin(self.orientation)
+
+
 
 class Missile:
     def __init__(self, idx, teamcode):
@@ -254,10 +273,10 @@ class BattleEnv:
                 continue
 
             # [sin alpha, cos alpha, velosity scale, shoot]
-            sa, ca, vs, sh = actions[idx]
+            a, phi, sh = actions[idx]
             action_shoot = True if sh>0 else False
 
-            drone._update(sa, ca, vs)
+            drone._update(a * MAX_ACCELERATE, phi * MAX_ANGLE_ACCE)
             
             # 出地图边界
             if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
@@ -271,7 +290,7 @@ class BattleEnv:
             
             # 处理发射
             if action_shoot and drone.fire_cooltime <= 0:
-                self.missiles[idx]._shootout(drone.x, drone.y, drone.vx, drone.vy)
+                self.missiles[idx]._shootout(drone.x, drone.y, drone.v * np.cos(drone.orientation), drone.v * np.cos(drone.orientation) )
                 drone.fire_cooltime = self.fire_cooldown
             
             if drone.fire_cooltime > 0:
@@ -337,7 +356,8 @@ class BattleEnv:
             color = self.color_red_team if drone.team == 'red' else self.color_blue_team
             # pygame.draw.circle(self.screen, color, (int(drone.x), int(drone.y)), 10)
             # print(drone.orientation)
-            rotation = np.arctan2(-drone.vy, drone.vx)
+            # rotation = np.arctan2(-drone.vy, drone.vx)
+            rotation = drone.orientation
             rotated_img = pygame.transform.rotate(self.drone_img, rotation*180/np.pi - 90)  # 转换为顺时针旋转
             rect = rotated_img.get_rect(center=(drone.x, drone.y))
             self.screen.blit(rotated_img, rect)
