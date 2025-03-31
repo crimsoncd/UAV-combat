@@ -29,7 +29,7 @@ class Drone:
         # 状态量: x, y, alpha, v, w
         self.x = x
         self.y = y
-        self.orientation = 0
+        self.orientation = 0 if self.teamcode==0 else 3.14
         self.v = 0
         self.w = 0
 
@@ -37,7 +37,7 @@ class Drone:
 
         # a, phi: accelerate, angle accelerate
         self.v += np.clip(a, -MAX_ACCELERATE, MAX_ACCELERATE)
-        self.v = np.clip(self.v, -MAX_SPEED, MAX_SPEED)
+        self.v = np.clip(self.v, 0, MAX_SPEED)
         self.w += np.clip(phi, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
         self.w = np.clip(self.w, -MAX_ANGLE_SPEED, MAX_ANGLE_SPEED)
 
@@ -79,20 +79,21 @@ class Missile:
 
     def _update(self):
         if self.exist:
-            self.x += self.speed * self.vx
-            self.y += self.speed * self.vy
+            self.x += self.vx
+            self.y += self.vy
             self.life -= 1
             if self.life <= 0:
                 self._reset()
         # print("Missile index", self.id, " state:", self.exist)
 
-    def _shootout(self, start_x, start_y, vx, vy):
+    def _shootout(self, start_x, start_y, orientation):
         self.exist = True
         self.x = start_x
         self.y = start_y
-        self.vx = vx
-        self.vy = vy
-        self.orientation = self.vy / self.vx if self.vx!=0 else 999
+        self.vx = self.speed * np.cos(orientation)
+        self.vy = self.speed * np.sin(orientation)
+        self.vx, self.vy = float(self.vx), float(self.vy)
+        self.orientation = orientation
         self.life = self.lifelong
 
     def _collide(self):
@@ -159,11 +160,11 @@ class BattleEnv:
         """重置环境"""
         for drone in self.drones:
             if drone.team == 'red':
-                drone.x = 50
-                drone.y = np.random.uniform(0, self.map_size[1])
+                drone.x = np.random.uniform(50, self.map_size[0] - 50)
+                drone.y = np.random.uniform(50, self.map_size[1] - 50)
             else:
-                drone.x = self.map_size[0] - 50
-                drone.y = np.random.uniform(0, self.map_size[1])
+                drone.x = np.random.uniform(50, self.map_size[0] - 50)
+                drone.y = np.random.uniform(50, self.map_size[1] - 50)
             drone.alive = True
             drone.fire_cooltime = 0
         for missile in self.missiles:
@@ -176,7 +177,7 @@ class BattleEnv:
         state = []
         for drone in self.drones:
             # state += [drone.x, drone.y, drone.alive, drone.fire_cooltime]
-            state += [drone.x, drone.y, drone.alive, drone.fire_cooltime]
+            state += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
         for missile in self.missiles:
             state += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         return np.array(state, dtype=np.float32)
@@ -185,12 +186,12 @@ class BattleEnv:
         obs = []
         for drone in self.drones:
             if drone.teamcode == self.drones[idx].teamcode:
-                obs += [drone.x, drone.y, drone.alive, drone.fire_cooltime]
+                obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
             else:
                 if (drone.x-self.drones[idx].x)**2 + (drone.y-self.drones[idx].y)**2 <= 200**2:
-                    obs += [drone.x, drone.y, drone.alive, drone.fire_cooltime]
+                    obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
                 else:
-                    obs += [0, 0, 0, 0]
+                    obs += [0, 0, 0, 0, 0, 0]
         for missile in self.missiles:
             obs += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         return np.array(obs, dtype=np.float32)
@@ -290,7 +291,7 @@ class BattleEnv:
             
             # 处理发射
             if action_shoot and drone.fire_cooltime <= 0:
-                self.missiles[idx]._shootout(drone.x, drone.y, drone.v * np.cos(drone.orientation), drone.v * np.cos(drone.orientation) )
+                self.missiles[idx]._shootout(drone.x, drone.y, drone.orientation)
                 drone.fire_cooltime = self.fire_cooldown
             
             if drone.fire_cooltime > 0:
@@ -344,7 +345,9 @@ class BattleEnv:
             self.screen = pygame.display.set_mode(self.map_size)
             self.clock = pygame.time.Clock()
             self.drone_img = pygame.image.load(r'assets\drone.png').convert_alpha()
-            self.drone_img = pygame.transform.scale(self.drone_img, (40, 40))
+            self.drone_img = pygame.transform.scale(self.drone_img, (30, 30))
+            self.drone_img_a = pygame.image.load(r'assets\drone_purple.png').convert_alpha()
+            self.drone_img_a = pygame.transform.scale(self.drone_img_a, (30, 30))
             
         # self.screen.fill((255, 255, 255))
         self.screen.fill(self.color_darkbg)
@@ -358,7 +361,8 @@ class BattleEnv:
             # print(drone.orientation)
             # rotation = np.arctan2(-drone.vy, drone.vx)
             rotation = drone.orientation
-            rotated_img = pygame.transform.rotate(self.drone_img, rotation*180/np.pi - 90)  # 转换为顺时针旋转
+            to_draw = self.drone_img if drone.team=="red" else self.drone_img_a
+            rotated_img = pygame.transform.rotate(to_draw, rotation*180/np.pi - 90)  # 转换为顺时针旋转
             rect = rotated_img.get_rect(center=(drone.x, drone.y))
             self.screen.blit(rotated_img, rect)
             # pygame.draw.circle(self.screen, color, (drone.x, drone.y), rect.width//2 + 5, 2 ) # 线宽)

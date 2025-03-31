@@ -45,18 +45,19 @@ class Actor(nn.Module):
         )
         self.to(device)
 
-    def forward(self, state, tau=0.08, hard=True):
-        # r = np.random.rand()
+    def forward(self, state, tau=0, hard=True):
+        r = np.random.rand()
+        out = self.net(state)
         # state = state.to(device)
         # out, _ = self.lstm(state)
         # logits = self.net(out)
         # logits = self.net(state)
         # action = gumbel_softmax(logits, tau=tau, hard=hard)
         # out = torch.argmax(action, dim=-1, keepdim=True)  # 训练时返回soft采样，测试时返回hard
-        # if r<tau:
-        #     return torch.randint(0, 12, out.shape).cpu()
-        # return out.cpu()
-        return self.net(state).cpu()
+        if r<tau and tau>0 and hard:
+            return out.uniform_(-1, 1).cpu()
+        return out.cpu()
+        # return self.net(state).cpu()
     
 
 # Critic网络：输入全局状态+所有智能体动作
@@ -98,7 +99,7 @@ class ReplayBuffer(deque):
         )
 
 class MADDPG:
-    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.995, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
+    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.998, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())
@@ -129,11 +130,11 @@ class MADDPG:
         self.noise_decrease = 0.01/200
         self.memory = ReplayBuffer(100000)
 
-    def update_tau(self, new_tau = 0):
-        if new_tau>0:
-            self.tau = new_tau
-        else:
+    def update_tau(self, new_tau="Not Change"):
+        if new_tau=="Not Change":
             self.tau *= self.tau_decay
+        else:
+            self.tau = new_tau
 
     def update_epsilon(self):
         self.epsilon *= self.epsilon_decay
@@ -245,7 +246,7 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
 
     model_save_path = "models/actor_" + task_code
     log_save_path = "pics/totallog_" + task_code + ".txt"
-    record_save_path = "record/record_" + task_code + ".jsonl"
+    record_save_path = "record/record_" + task_code
     
     
     for ep in range(episodes):
@@ -291,14 +292,15 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
             logfile.write(log_text+"\n")
             logfile.close()
 
-        change_tau = 0.08 if ep>500 else 0
+        change_tau = 0 if ep>1000 else "Not Change"
         agent.update_tau(new_tau=change_tau)
         agent.update_epsilon()
 
         episode_rewards.append(total_rewards[:].mean())
         periodical_rewards.append(total_rewards[:].mean())
 
-        env.save_and_clear(ep, record_save_path)
+        record_period = ep // 100
+        env.save_and_clear(ep, record_save_path + "_part" + str(record_period) + ".jsonl")
         
         if ep % 100 == 0:
             torch.save(agent.actors[0].state_dict(), model_save_path + f"_ep{ep}.pth")
