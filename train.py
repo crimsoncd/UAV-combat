@@ -9,7 +9,7 @@ from maddpg import MADDPG, train
 if __name__ == "__main__":
 
     # task_series = "F_commu"
-    task_code = "00_uniformtest"
+    task_code = "04_smaller_accelerate"
 
     env = BattleEnv(red_agents=1, blue_agents=1, auto_record=True)
     rewards = train(env, episodes=3000, is_render=False, task_code=task_code)

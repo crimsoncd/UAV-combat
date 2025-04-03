@@ -101,7 +101,7 @@ class ReplayBuffer(deque):
         )
 
 class MADDPG:
-    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.998, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
+    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.997, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())

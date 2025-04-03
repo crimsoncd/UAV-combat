@@ -11,9 +11,9 @@ from env_utils import DroneRewardSecond
 
 
 MAX_SPEED = 8
-MAX_ANGLE_SPEED = np.pi / 8
+MAX_ANGLE_SPEED = np.pi / 16
 MAX_ACCELERATE = 4
-MAX_ANGLE_ACCE = np.pi / 16
+MAX_ANGLE_ACCE = np.pi / 32
 
 MAP_SIZE_0 = 750
 MAP_SIZE_1 = 750
@@ -329,7 +329,8 @@ class BattleEnv:
 
         DronesReward = DroneRewardSecond(self.drones, actions)
         drones_rewards = DronesReward.update_and_return()
-        rewards = np.add(rewards, drones_rewards)
+        # rewards = np.add(rewards, drones_rewards)
+        rewards = drones_rewards
 
         # 检查终止条件
         done = not (any(d.alive for d in self.drones[:self.red_agents]) and 

@@ -3,9 +3,9 @@ import numpy as np
 import math
 
 MAX_SPEED = 8
-MAX_ANGLE_SPEED = np.pi / 8
+MAX_ANGLE_SPEED = np.pi / 16
 MAX_ACCELERATE = 4
-MAX_ANGLE_ACCE = np.pi / 16
+MAX_ANGLE_ACCE = np.pi / 32
 
 MAP_SIZE_0 = 750
 MAP_SIZE_1 = 750
@@ -158,6 +158,29 @@ class DroneRewardSecond:
         rewards = np.zeros(len(self.drones))
         
         for idx, drone in enumerate(self.drones):
+            action = self.actions[idx]
+            a, phi, shoot = action
+
+            flag_small_angle_speed = bool(abs(drone.w) <= 0.25 * MAX_ANGLE_SPEED)
+            flag_angle_speed_decrease = bool(abs(phi) <= 0.25)
+
+            flag_proper_speed = bool(drone.v>0.25*MAX_SPEED and drone.v>0.5*MAX_SPEED)
+
+            if flag_small_angle_speed or flag_angle_speed_decrease:
+                rewards[idx] += 0.2
+
+            if flag_proper_speed:
+                rewards[idx] += 0.2
+
+        return rewards
+    
+
+
+
+    def update_and_return_bot(self):
+        rewards = np.zeros(len(self.drones))
+        
+        for idx, drone in enumerate(self.drones):
             if not drone.alive:
                 rewards[idx] -= 0.5  # 持续死亡惩罚
                 continue
@@ -177,10 +200,16 @@ class DroneRewardSecond:
                 
             # ===== 移动策略 =====
             # 推进效率（鼓励合理加速）
-            rewards[idx] += 0.02 * (1 - abs(action[0])) 
+            # rewards[idx] += 0.02 * (1 - abs(action[0])) 
             
-            # 转向效率（鼓励平滑转向）
-            rewards[idx] += 0.01 * (1 - abs(action[1]))
+            # # 转向效率（鼓励平滑转向）
+            # rewards[idx] += 0.01 * (1 - abs(action[1]))
+
+            # 角速度不太大奖励（自己想的）
+            if abs(drone.w) > 0.25*MAX_ANGLE_SPEED:
+                rewards[idx] -= 0.2
+            if abs(drone.w) > 0.5*MAX_ANGLE_SPEED:
+                rewards[idx] -= 0.2
             
             # ===== 战术定位 =====
             if enemies:
