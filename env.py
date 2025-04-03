@@ -7,12 +7,16 @@ import math
 from copy import deepcopy
 import json
 from env_utils import DroneReward, rewind, nearest_direction
+from env_utils import DroneRewardSecond
 
 
 MAX_SPEED = 8
 MAX_ANGLE_SPEED = np.pi / 8
 MAX_ACCELERATE = 4
 MAX_ANGLE_ACCE = np.pi / 16
+
+MAP_SIZE_0 = 750
+MAP_SIZE_1 = 750
 
 
 class Drone:
@@ -323,7 +327,7 @@ class BattleEnv:
             self._record_frame()
             self.frame_idx += 1
 
-        DronesReward = DroneReward(self.drones, actions)
+        DronesReward = DroneRewardSecond(self.drones, actions)
         drones_rewards = DronesReward.update_and_return()
         rewards = np.add(rewards, drones_rewards)
 

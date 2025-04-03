@@ -13,6 +13,8 @@ from env import BattleEnv
 from env_utils import noise_mask
 import time
 
+from pathlib import Path
+
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 ACTION_DIMENSION = 3
@@ -244,10 +246,9 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
     episode_rewards = []
     periodical_rewards = []
 
-    model_save_path = "models/actor_" + task_code
-    log_save_path = "pics/totallog_" + task_code + ".txt"
-    record_save_path = "record/record_" + task_code
-    
+    uniform_path = Path("uniform") / task_code
+    if not os.path.exists(uniform_path):
+        os.mkdir(uniform_path)
     
     for ep in range(episodes):
 
@@ -259,6 +260,10 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
         a_loss_episode = []
         c_loss_episode = []
         film_record = []
+
+        model_save_path = uniform_path / f"model_ep{ep}.pth"
+        log_save_path = uniform_path / "log.txt"
+        record_save_path = uniform_path / f"record_part_{ep//100}.jsonl"
         
         for _ in range(max_steps):
             actions = agent.act(state)
@@ -299,11 +304,10 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
         episode_rewards.append(total_rewards[:].mean())
         periodical_rewards.append(total_rewards[:].mean())
 
-        record_period = ep // 100
-        env.save_and_clear(ep, record_save_path + "_part" + str(record_period) + ".jsonl")
+        env.save_and_clear(ep, record_save_path)
         
         if ep % 100 == 0:
-            torch.save(agent.actors[0].state_dict(), model_save_path + f"_ep{ep}.pth")
+            torch.save(agent.actors[0].state_dict(), model_save_path)
 
     
     return rewards_log

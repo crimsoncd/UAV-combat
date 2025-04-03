@@ -2,6 +2,16 @@
 import numpy as np
 import math
 
+MAX_SPEED = 8
+MAX_ANGLE_SPEED = np.pi / 8
+MAX_ACCELERATE = 4
+MAX_ANGLE_ACCE = np.pi / 16
+
+MAP_SIZE_0 = 750
+MAP_SIZE_1 = 750
+
+
+
 # Small utils
 def rewind(input_num, lower_bound, upper_bound, maintain_int=True):
     # This function is used to cut the number in a range
@@ -129,3 +139,100 @@ class DroneReward():
             self.update_position_reward()
         # print("Calculated rewards:", self.rewards)
         return self.rewards
+    
+
+
+class DroneRewardSecond:
+    def __init__(self, drones: list, actions: list):
+        self.drones = drones
+        self.actions = actions
+        self.last_positions = {drone.id:(drone.x, drone.y) for drone in drones}
+        
+    def _get_enemies(self, drone):
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
+    
+    def _get_allies(self, drone):
+        return [d for d in self.drones if d.teamcode == drone.teamcode and d.id != drone.id and d.alive]
+
+    def update_and_return(self):
+        rewards = np.zeros(len(self.drones))
+        
+        for idx, drone in enumerate(self.drones):
+            if not drone.alive:
+                rewards[idx] -= 0.5  # 持续死亡惩罚
+                continue
+                
+            enemies = self._get_enemies(drone)
+            allies = self._get_allies(drone)
+            action = self.actions[idx]
+            
+            # ===== 基础奖励 =====
+            rewards[idx] += 0.1  # 生存奖励
+            
+            # ===== 攻击系统 =====
+            # 成功开火奖励（在step()中已实现）
+            # 冷却期闲置惩罚
+            if drone.fire_cooltime <= 0 and action[2] < 0:
+                rewards[idx] -= 0.2
+                
+            # ===== 移动策略 =====
+            # 推进效率（鼓励合理加速）
+            rewards[idx] += 0.02 * (1 - abs(action[0])) 
+            
+            # 转向效率（鼓励平滑转向）
+            rewards[idx] += 0.01 * (1 - abs(action[1]))
+            
+            # ===== 战术定位 =====
+            if enemies:
+                # 获取最近敌人
+                nearest = min(enemies, key=lambda e: (e.x-drone.x)**2 + (e.y-drone.y)**2)
+                dist = math.hypot(nearest.x-drone.x, nearest.y-drone.y)
+                
+                # 动态距离奖励（最优攻击距离区间）
+                if 100 < dist < 400:
+                    rewards[idx] += 0.05 * (1 - abs(dist-250)/150)
+                else:
+                    rewards[idx] -= 0.03
+                    
+                # 朝向奖励（航向角与目标夹角）
+                target_angle = math.atan2(nearest.y-drone.y, nearest.x-drone.x)
+                angle_diff = abs((drone.orientation - target_angle) % (2*math.pi))
+                rewards[idx] += 0.1 * (1 - angle_diff/math.pi)
+                
+                # 移动趋势奖励（与上次位置变化）
+                dx = drone.x - self.last_positions[drone.id][0]
+                dy = drone.y - self.last_positions[drone.id][1]
+                move_vec = math.atan2(dy, dx)
+                move_diff = abs((move_vec - target_angle) % (2*math.pi))
+                rewards[idx] += 0.05 * (1 - move_diff/math.pi)
+            
+            # ===== 团队协作 =====
+            # 集群密度奖励（鼓励保持队形）
+            if allies:
+                avg_dist = sum(math.hypot(a.x-drone.x, a.y-drone.y) for a in allies)/len(allies)
+                rewards[idx] += 0.03 * (1 - avg_dist/500) if avg_dist < 500 else -0.02
+                
+            # 支援奖励（队友攻击时）
+            # for ally in allies:
+            #     if ally.fire_cooltime == MAX_FIRE_COOLDOWN-1:  # 检测到队友刚开火
+            #         rewards[idx] += 0.1 * (1 - math.hypot(ally.x-drone.x, ally.y-drone.y)/800)
+
+            # ===== 边界惩罚 =====
+            if (drone.x < 50 or drone.x > MAP_SIZE_0-50 or 
+                drone.y < 50 or drone.y > MAP_SIZE_1-50):
+                rewards[idx] -= 0.2
+                
+            # 更新位置记录
+            self.last_positions[drone.id] = (drone.x, drone.y)
+            
+        # ===== 团队胜负奖励 ===== 
+        red_alive = sum(1 for d in self.drones if d.team=='red' and d.alive)
+        blue_alive = sum(1 for d in self.drones if d.team=='blue' and d.alive)
+        
+        for idx, drone in enumerate(self.drones):
+            if drone.team == 'red' and blue_alive == 0:
+                rewards[idx] += 20
+            elif drone.team == 'blue' and red_alive == 0:
+                rewards[idx] += 20
+                
+        return rewards

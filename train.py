@@ -9,10 +9,10 @@ from maddpg import MADDPG, train
 if __name__ == "__main__":
 
     # task_series = "F_commu"
-    task_code = "atf_5v5"
+    task_code = "00_uniformtest"
 
-    env = BattleEnv(red_agents=5, blue_agents=5, auto_record=True)
-    rewards = train(env, episodes=5000, is_render=False, task_code=task_code)
+    env = BattleEnv(red_agents=1, blue_agents=1, auto_record=True)
+    rewards = train(env, episodes=3000, is_render=False, task_code=task_code)
 
     exit(0)
     
