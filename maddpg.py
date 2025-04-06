@@ -20,14 +20,22 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 ACTION_DIMENSION = 3
 
 
-def gumbel_softmax(logits, tau=1.0, hard=False):
-    gumbels = -torch.empty_like(logits).exponential_().log()
-    y = logits + gumbels
-    y = F.softmax(y / tau, dim=-1)
-    if hard:
-        y_hard = torch.zeros_like(y).scatter_(-1, torch.argmax(y, dim=-1, keepdim=True), 1.0)
-        y = (y_hard - y).detach() + y
-    return y
+# class OUNoise:
+#     def __init__(self, action_dim=ACTION_DIMENSION, mu=0.0, theta=0.2, sigma=0.2, scale=0.3):
+#         self.action_dim = action_dim
+#         self.mu = mu          # 均值
+#         self.theta = theta    # 回归速度
+#         self.sigma = sigma    # 扩散系数
+#         self.scale = scale    # 初始噪声强度
+#         self.state = np.ones(action_dim) * self.mu
+
+#     def reset(self):
+#         self.state = np.ones(self.action_dim) * self.mu
+
+#     def sample(self):
+#         dx = self.theta * (self.mu - self.state) + self.sigma * np.random.randn(self.action_dim)
+#         self.state += dx
+#         return self.state * self.scale
 
 
 
@@ -36,7 +44,7 @@ def gumbel_softmax(logits, tau=1.0, hard=False):
 class Actor(nn.Module):
     def __init__(self, state_dim, hidden_dim=256):
         super(Actor, self).__init__()
-        self.lstm = nn.LSTM(state_dim, state_dim)
+        # self.lstm = nn.LSTM(state_dim, state_dim)
         self.net = nn.Sequential(
             nn.Linear(state_dim, 128),
             nn.ReLU(),
@@ -47,19 +55,13 @@ class Actor(nn.Module):
         )
         self.to(device)
 
-    def forward(self, state, tau=0, hard=True):
-        r = np.random.rand()
+    def forward(self, state, training=True, noise_scale=0.1):
         out = self.net(state)
-        # state = state.to(device)
-        # out, _ = self.lstm(state)
-        # logits = self.net(out)
-        # logits = self.net(state)
-        # action = gumbel_softmax(logits, tau=tau, hard=hard)
-        # out = torch.argmax(action, dim=-1, keepdim=True)  # 训练时返回soft采样，测试时返回hard
-        if r<tau and tau>0 and hard:
-            return out.uniform_(-1, 1).cpu()
+        if training:
+            # 训练时添加噪声
+            noise = torch.randn_like(out) * noise_scale
+            out = torch.clamp(out + noise, -1, 1)
         return out.cpu()
-        # return self.net(state).cpu()
     
 
 # Critic网络：输入全局状态+所有智能体动作
@@ -101,7 +103,7 @@ class ReplayBuffer(deque):
         )
 
 class MADDPG:
-    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.995, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
+    def __init__(self, env, gamma=0.99, noise=1, noise_decay=0.9995, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())
@@ -123,42 +125,34 @@ class MADDPG:
         self.critic_optimizers = [optim.Adam(critic.parameters(), lr=critic_lr) for critic in self.critics]
         
         self.gamma = gamma
-        self.tau = tau
-        self.tau_decay = tau_decay
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
-        self.noise_scale = 5
-        self.noise_decay = 0.9995
-        self.noise_decrease = 0.01/200
+        self.noise_scale = noise
+        self.noise_decay = noise_decay
+        # self.noise_decrease = 0
         self.memory = ReplayBuffer(100000)
 
-    def update_tau(self, new_tau="Not Change"):
-        if new_tau=="Not Change":
-            self.tau *= self.tau_decay
-        else:
-            self.tau = new_tau
+    # def update_tau(self, new_tau="Not Change"):
+    #     if new_tau=="Not Change":
+    #         self.tau *= self.tau_decay
+    #     else:
+    #         self.tau = new_tau
+
+    def update_noise(self):
+        self.noise_scale *= self.noise_decay
 
     def update_epsilon(self):
+        if self.epsilon==0:
+            return
         self.epsilon *= self.epsilon_decay
     
     def act(self, state):
         # state = noise_mask(state)
         actions = []
-        explore = np.random.rand()
-        # state_tensor = torch.FloatTensor(state).unsqueeze(0)
-        # for i in range(self.num_agents):
-        #     if explore <= self.epsilon:
-        #         action = self.env.induce_step(i)
-        #     else:
-        #         obs = self.env._get_obs(i)
-        #         obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-        #         action = self.actors[i](obs_tensor, tau=self.tau)[0].squeeze()
-        #     actions.append(action)
-        # print(actions)
         for i in range(self.num_agents):
             obs = self.env._get_obs(i)
             obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-            action = self.actors[i](obs_tensor, tau=self.tau)[0].squeeze().detach().numpy()
+            action = self.actors[i](obs_tensor, noise_scale=self.noise_scale)[0].squeeze().detach().numpy()
             actions.append(action)
         # print(actions)
         return actions
@@ -218,9 +212,9 @@ class MADDPG:
 
             # Soft update target networks
             for target, param in zip(self.target_actors[i].parameters(), self.actors[i].parameters()):
-                target.data.copy_(self.tau * param + (1 - self.tau) * target)
+                target.data.copy_(self.noise_scale * param + (1 - self.noise_scale) * target)
             for target, param in zip(self.target_critics[i].parameters(), self.critics[i].parameters()):
-                target.data.copy_(self.tau * param + (1 - self.tau) * target)
+                target.data.copy_(self.noise_scale * param + (1 - self.noise_scale) * target)
 
         # return np.mean(actor_losses), np.mean(critic_losses)
 
@@ -237,7 +231,16 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
 
     print("Using device:", device)
 
-    agent = MADDPG(env)
+    agent = MADDPG(env,
+                   gamma=0.99,
+                   noise=0.4,
+                   noise_decay=0.999,
+                   epsilon=0,
+                   epsilon_decay=0.9995,
+                   actor_lr=1e-4,
+                   critic_lr=1e-3
+                   )
+    
     rewards_log = []
     episode_rewards = []
     periodical_rewards = []
@@ -287,14 +290,13 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
 
         avg_reward = total_rewards.mean()
         rewards_log.append(avg_reward)
-        log_text = f"Episode {ep+1}, Reward:{avg_reward:.2f}, Noise:{agent.tau:.3f}, epsilon:{agent.epsilon: .3f}, aloss:{np.mean(a_loss_episode): .3f}, closs:{np.mean(c_loss_episode): .3f}, time:{time_cosumed: .2f}"
+        log_text = f"Episode {ep+1}, Reward:{avg_reward:.2f}, Noise:{agent.noise_scale:.3f}, epsilon:{agent.epsilon: .3f}, aloss:{np.mean(a_loss_episode): .3f}, closs:{np.mean(c_loss_episode): .3f}, time:{time_cosumed: .2f}"
         print(log_text)
         with open(log_save_path, "a") as logfile:
             logfile.write(log_text+"\n")
             logfile.close()
 
-        change_tau = 0 if ep>1000 else "Not Change"
-        agent.update_tau(new_tau=change_tau)
+        agent.update_noise()
         agent.update_epsilon()
 
         episode_rewards.append(total_rewards[:].mean())

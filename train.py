@@ -9,7 +9,7 @@ from maddpg import MADDPG, train
 if __name__ == "__main__":
 
     # task_series = "F_commu"
-    task_code = "06_revisegpt_reverse_E"
+    task_code = "07_new_noise_complete_test"
 
     env = BattleEnv(red_agents=5, blue_agents=5, auto_record=True)
     rewards = train(env, episodes=3000, is_render=False, task_code=task_code)

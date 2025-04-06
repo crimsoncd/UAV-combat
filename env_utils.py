@@ -154,7 +154,7 @@ class DroneRewardSecond:
     def _get_allies(self, drone):
         return [d for d in self.drones if d.teamcode == drone.teamcode and d.id != drone.id and d.alive]
 
-    def update_and_return(self):
+    def update_and_return_deprive(self):
         rewards = np.zeros(len(self.drones))
         
         for idx, drone in enumerate(self.drones):
@@ -186,7 +186,7 @@ class DroneRewardSecond:
 
 
 
-    def update_and_return_bot(self):
+    def update_and_return(self):
         rewards = np.zeros(len(self.drones))
         
         for idx, drone in enumerate(self.drones):
@@ -209,16 +209,16 @@ class DroneRewardSecond:
                 
             # ===== 移动策略 =====
             # 推进效率（鼓励合理加速）
-            # rewards[idx] += 0.02 * (1 - abs(action[0])) 
+            rewards[idx] += 0.02 * (1 - abs(action[0])) 
             
             # # 转向效率（鼓励平滑转向）
-            # rewards[idx] += 0.01 * (1 - abs(action[1]))
+            rewards[idx] += 0.01 * (1 - abs(action[1]))
 
             # 角速度不太大奖励（自己想的）
-            if abs(drone.w) > 0.25*MAX_ANGLE_SPEED:
-                rewards[idx] -= 0.2
-            if abs(drone.w) > 0.5*MAX_ANGLE_SPEED:
-                rewards[idx] -= 0.2
+            # if abs(drone.w) > 0.25*MAX_ANGLE_SPEED:
+            #     rewards[idx] -= 0.2
+            # if abs(drone.w) > 0.5*MAX_ANGLE_SPEED:
+            #     rewards[idx] -= 0.2
             
             # ===== 战术定位 =====
             if enemies:
@@ -264,13 +264,13 @@ class DroneRewardSecond:
             self.last_positions[drone.id] = (drone.x, drone.y)
             
         # ===== 团队胜负奖励 ===== 
-        red_alive = sum(1 for d in self.drones if d.team=='red' and d.alive)
-        blue_alive = sum(1 for d in self.drones if d.team=='blue' and d.alive)
+        # red_alive = sum(1 for d in self.drones if d.team=='red' and d.alive)
+        # blue_alive = sum(1 for d in self.drones if d.team=='blue' and d.alive)
         
-        for idx, drone in enumerate(self.drones):
-            if drone.team == 'red' and blue_alive == 0:
-                rewards[idx] += 20
-            elif drone.team == 'blue' and red_alive == 0:
-                rewards[idx] += 20
+        # for idx, drone in enumerate(self.drones):
+        #     if drone.team == 'red' and blue_alive == 0:
+        #         rewards[idx] += 20
+        #     elif drone.team == 'blue' and red_alive == 0:
+        #         rewards[idx] += 20
                 
         return rewards
