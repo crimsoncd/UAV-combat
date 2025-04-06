@@ -101,7 +101,7 @@ class ReplayBuffer(deque):
         )
 
 class MADDPG:
-    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.997, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
+    def __init__(self, env, gamma=0.99, tau=1, tau_decay=0.995, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())
@@ -166,55 +166,48 @@ class MADDPG:
     
     def update(self, batch_size):
         if len(self.memory) < batch_size:
-            return 0,0
-        
+            return 0, 0
+
         states, actions, rewards, next_states, dones = self.memory.sample(batch_size)
-        states = states.view(batch_size, -1).to(device)
-        next_states = next_states.view(batch_size, -1).to(device)
-        actions = actions.view(batch_size, -1).to(device)
+        
+        # Ensure that all tensors are on the correct device
+        states = states.to(device)
+        next_states = next_states.to(device)
+        actions = actions.to(device)
+        rewards = rewards.to(device)
+        dones = dones.to(device)
 
         actor_losses = []
         critic_losses = []
-        
+
         for i in range(self.num_agents):
             # Update Critic
             with torch.no_grad():
                 target_acts = torch.cat([
-                    self.target_actors[j](next_states).to(device) if j == i 
-                    else self.target_actors[j](next_states).detach().to(device)
-                    for j in range(self.num_agents)
+                    self.target_actors[j](next_states).detach().to(device) for j in range(self.num_agents)
                 ], dim=-1)
-                # print(next_states.shape, target_acts.shape)
                 target_q = self.target_critics[i](next_states, target_acts)
                 target_q = rewards[:, i].unsqueeze(1) + (1 - dones) * self.gamma * target_q
-            
+
             current_acts = []
             for j in range(self.num_agents):
-                if j == i:
-                    current_act = self.actors[j](states)
-                else:
-                    current_act = self.actors[j](states).detach()
-                current_acts.append(current_act.to(device))
-            current_acts = torch.cat(current_acts, dim=1)
+                current_acts.append(self.actors[j](states).detach() if j != i else self.actors[j](states))
+            current_acts = torch.cat(current_acts, dim=1).to(device)
             current_q = self.critics[i](states, current_acts)
             critic_loss = nn.MSELoss()(current_q, target_q)
-            
+
             self.critic_optimizers[i].zero_grad()
             critic_loss.backward()
             nn.utils.clip_grad_norm_(self.critics[i].parameters(), 0.5)
             self.critic_optimizers[i].step()
-            
+
             # Update Actor
             actor_acts = []
             for j in range(self.num_agents):
-                if j == i:
-                    actor_act = self.actors[j](states)
-                else:
-                    actor_act = self.actors[j](states).detach()
-                actor_acts.append(actor_act.to(device))
-            actor_acts = torch.cat(actor_acts, dim=1)
+                actor_acts.append(self.actors[j](states).detach() if j != i else self.actors[j](states))
+            actor_acts = torch.cat(actor_acts, dim=1).to(device)
             actor_loss = -self.critics[i](states, actor_acts).mean()
-            
+
             self.actor_optimizers[i].zero_grad()
             actor_loss.backward()
             nn.utils.clip_grad_norm_(self.actors[i].parameters(), 0.5)
@@ -222,17 +215,20 @@ class MADDPG:
 
             actor_losses.append(actor_loss.item())
             critic_losses.append(critic_loss.item())
-            
+
             # Soft update target networks
             for target, param in zip(self.target_actors[i].parameters(), self.actors[i].parameters()):
                 target.data.copy_(self.tau * param + (1 - self.tau) * target)
             for target, param in zip(self.target_critics[i].parameters(), self.critics[i].parameters()):
                 target.data.copy_(self.tau * param + (1 - self.tau) * target)
-        
-        # self.noise_scale *= self.noise_decay
-        # self.noise_scale -= self.noise_decrease
-        # self.noise_scale = max(self.noise_scale, 0)
-        # print(np.mean(actor_losses), np.mean(critic_losses))
+
+        # return np.mean(actor_losses), np.mean(critic_losses)
+
+            
+            # self.noise_scale *= self.noise_decay
+            # self.noise_scale -= self.noise_decrease
+            # self.noise_scale = max(self.noise_scale, 0)
+            # print(np.mean(actor_losses), np.mean(critic_losses))
         if len(actor_losses)*len(critic_losses)==0:
             return 0,0
         return np.mean(actor_losses), np.mean(critic_losses)

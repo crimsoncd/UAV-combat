@@ -161,16 +161,25 @@ class DroneRewardSecond:
             action = self.actions[idx]
             a, phi, shoot = action
 
-            flag_small_angle_speed = bool(abs(drone.w) <= 0.25 * MAX_ANGLE_SPEED)
-            flag_angle_speed_decrease = bool(abs(phi) <= 0.25)
+            # if abs(a) <= 0.1:
+            #     rewards[idx] += 0.1
 
-            flag_proper_speed = bool(drone.v>0.25*MAX_SPEED and drone.v>0.5*MAX_SPEED)
+            # if abs(phi) <= 0.1:
+            #     rewards[idx] += 0.1
 
-            if flag_small_angle_speed or flag_angle_speed_decrease:
-                rewards[idx] += 0.2
+            if shoot < 0:
+                rewards[idx] += 1
 
-            if flag_proper_speed:
-                rewards[idx] += 0.2
+            # flag_small_angle_speed = bool(abs(drone.w) <= 0.25 * MAX_ANGLE_SPEED)
+            # flag_angle_speed_decrease = bool(abs(phi) <= 0.25)
+
+            # flag_proper_speed = bool(drone.v>0.25*MAX_SPEED and drone.v>0.5*MAX_SPEED)
+
+            # if flag_small_angle_speed or flag_angle_speed_decrease:
+            #     rewards[idx] += 0.2
+
+            # if flag_proper_speed:
+            #     rewards[idx] += 0.2
 
         return rewards
     
