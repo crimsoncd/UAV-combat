@@ -2,3 +2,4 @@ models/
 pics/
 record/
 uniform/
+__pycache__/
