@@ -1,5 +1,5 @@
 from env import BattleEnv
-from maddpg import MADDPG, train
+from maddpg import MADDPG, train, train_Revised
 
 
 
@@ -9,10 +9,10 @@ from maddpg import MADDPG, train
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "12_Revised_1st"
+    task_code = "12_Revised_2nd_test"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
-    rewards = train(env, episodes=3000, is_render=False, task_code=task_code)
+    rewards = train_Revised(env, episodes=3000, is_render=True, task_code=task_code)
 
     exit(0)
     

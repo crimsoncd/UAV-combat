@@ -201,6 +201,12 @@ class BattleEnv:
             obs += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         return np.array(obs, dtype=np.float32)
     
+    def _get_obs_all(self):
+        obs = []
+        for i in range(self.total_agents):
+            obs.append(self._get_obs(i))
+        return obs
+    
     def _get_random_drone(self, team=0):
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
         return target_drone
@@ -331,7 +337,7 @@ class BattleEnv:
         # rewards = rewards[:num_drones//2]
         rewards = rewards[:]
         
-        return self._get_state(), rewards, done, {}
+        return self._get_obs_all(), rewards, done, {}
     
 
 
