@@ -6,14 +6,15 @@ import math
 
 from copy import deepcopy
 import json
-from env_utils import DroneReward, rewind, nearest_direction
-from env_utils import DroneRewardSecond
+# from env_utils import DroneReward, rewind, nearest_direction
+# from env_utils import DroneRewardSecond
+import env_utils
 
 
 MAX_SPEED = 8
-MAX_ANGLE_SPEED = np.pi / 16
+MAX_ANGLE_SPEED = np.pi / 16 
 MAX_ACCELERATE = 4
-MAX_ANGLE_ACCE = np.pi / 32
+MAX_ANGLE_ACCE = np.pi / 32 
 
 MAP_SIZE_0 = 750
 MAP_SIZE_1 = 750
@@ -200,6 +201,14 @@ class BattleEnv:
             obs += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         return np.array(obs, dtype=np.float32)
     
+    def _get_random_drone(self, team=0):
+        target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
+        return target_drone
+    
+    def _get_random_drone_position(self, team=0):
+        target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
+        return (target_drone.x, target_drone.y)
+    
     def _record_frame(self):
         frame = {
             "battle_index": self.battle_idx,
@@ -242,31 +251,14 @@ class BattleEnv:
                 self.missiles[obj["id"]].__dict__.update(deepcopy(obj["state"]))
     
     def induce_step(self, idx):
-        self_drone = self.drones[idx]
-        target_drone = None
-        lst_distance = 1000000
 
-        for enemy in self.drones:
-            if enemy.teamcode!=self_drone.teamcode and enemy.x**2+enemy.y**2>0:
-                distance = (self_drone.x - enemy.x)**2 + (self_drone.y - enemy.y)**2
-                if distance <= lst_distance:
-                    lst_distance = distance
-                    target_drone = enemy
+        drone = self.drones[idx]
+        
+        # Target aim
+        enemies = [d for d in self.drones if d.teamcode!=self.drones[idx].teamcode]
+        target_e = min(enemies, key=lambda e: (e.x-drone.x)**2 + (e.y-drone.y)**2)
 
-        if target_drone==None:
-            return 1 if self_drone.teamcode==0 else 8
-
-        facing = nearest_direction(self_drone.x, self_drone.y, target_drone.x, target_drone.y)
-        if distance <= 40000:
-            if self_drone.orientation!=facing:
-                return facing + 1
-            else:
-                if self_drone.fire_cooltime<=0:
-                    return 9
-                else:
-                    return 0
-        else:
-            return facing + 1
+        return env_utils.control_strategy_C(drone, target_e.x, target_e.y)
 
     def step(self, actions):
         """执行动作"""
@@ -327,7 +319,7 @@ class BattleEnv:
             self._record_frame()
             self.frame_idx += 1
 
-        DronesReward = DroneRewardSecond(self.drones, actions)
+        DronesReward = env_utils.GPTReward(self.drones, actions)
         drones_rewards = DronesReward.update_and_return()
         # rewards = np.add(rewards, drones_rewards)
         rewards = drones_rewards
@@ -395,16 +387,20 @@ if __name__ == "__main__":
 
     step = 0
     
-    while True and step<500:
+    while True and step<1000:
         # 生成随机动作（连续动作空间）
         actions = []
-        actions.append([0, -1, 0.8, 1])
-        for unit in range(1):
-            drone_action = []
-            for i in range(4):
-                a = np.random.random() * 2 - 1
-                drone_action.append(a)
-            actions.append(drone_action)
+        
+        # 一个飞机随机飞行
+        # actions.append(np.random.random(3) * 2 - 1)
+        actions.append([0, 0, 0])
+
+        # 一个飞机使用策略
+        self_drone = env._get_random_drone(1)
+        target_x, target_y = env._get_random_drone_position(0)
+        # actions.append(env_utils.control_strategy(self_drone, target_x, target_y))
+        # actions.append(env_utils.control_to_attack(self_drone, target_x, target_y))
+        actions.append(env_utils.control_strategy_C(self_drone, target_x, target_y))
         
         # print("actions:", actions)
         

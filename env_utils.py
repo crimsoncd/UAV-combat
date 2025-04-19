@@ -3,13 +3,14 @@ import numpy as np
 import math
 
 MAX_SPEED = 8
-MAX_ANGLE_SPEED = np.pi / 16
+MAX_ANGLE_SPEED = np.pi / 16 
 MAX_ACCELERATE = 4
 MAX_ANGLE_ACCE = np.pi / 32
 
 MAP_SIZE_0 = 750
 MAP_SIZE_1 = 750
 
+FIRE_RANGE = 50
 
 
 # Small utils
@@ -47,98 +48,161 @@ def noise_mask(array, mask_prob=0.25, mask_range=0.1):
         n_array.append(a)
     return n_array
 
-# def induce_step_from_state(state):
-#     self_drone = self.drones[idx]
-#     target_drone = np.random.choice([enemy for enemy in self.drones if enemy.teamcode!=self_drone.teamcode])
-#     distance = (self_drone.x - target_drone.x)**2 + (self_drone.y - target_drone.y)**2
-#     if distance <= 40000 and self_drone.cool_time<=0:
-#         return 9
-#     else:
-#         return nearest_direction(self_drone.x, self_drone.y, target_drone.x, target_drone.y) + 1
+def control_strategy_A(self_drone, enemy_x, enemy_y):
+    """生成控制指令以接近敌机并攻击"""
+    dx = enemy_x - self_drone.x
+    dy = enemy_y - self_drone.y
+    distance = np.hypot(dx, dy)
+    
+    # 计算目标方向
+    target_dir = np.arctan2(dy, dx)
+    # 计算方向误差（归一化到[-π, π]）
+    delta_theta = target_dir - self_drone.orientation
+    delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
+    
+    # 角加速度控制：比例控制
+    Kp_phi = 0.1  # 比例系数，调整转向灵敏度
+    phi = Kp_phi * delta_theta
+    phi = np.clip(phi, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+    
+    # 加速度控制：方向正确时加速，否则减速
+    if abs(delta_theta) < np.pi/6:  # 误差小于30度时加速
+        a = MAX_ACCELERATE
+    else:
+        a = -MAX_ACCELERATE * 0.5  # 反向减速以方便转向
+    
+    # 发射指令：在射程内且冷却完毕
+    fire = -1
+    if distance < FIRE_RANGE and self_drone.fire_cooltime <= 0:
+        fire = 1
+    
+    return a, phi, fire
+
+def control_strategy_B(drone, enemy_x, enemy_y):
+    """
+    控制己方无人机朝向敌机，并在合适时机进行攻击
+    返回加速度a, 角加速度phi, 是否发射fire(boolean)
+    """
+
+    # 1. 计算当前位置与目标之间的向量
+    dx = enemy_x - drone.x
+    dy = enemy_y - drone.y
+    target_angle = np.arctan2(dy, dx)  # 敌机相对角度
+
+    # 2. 当前机头朝向
+    current_angle = drone.orientation
+
+    # 3. 角度误差归一化到 [-pi, pi]
+    angle_diff = ((target_angle - current_angle + np.pi) % (2 * np.pi)) - np.pi
+
+    # 4. 控制角加速度 phi，让机头慢慢对准目标
+    K_phi = 0.1  # 控制增益，可以调整
+    phi = np.clip(K_phi * angle_diff - drone.w, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+
+    # 5. 控制加速度 a，简单策略是机头方向与目标方向越接近，a越大
+    if abs(angle_diff) < np.pi / 6:  # 如果偏差在30°以内
+        a = MAX_ACCELERATE
+    else:
+        a = 0  # 停止加速，先转头
+
+    # 6. 判断是否进入攻击范围
+    distance = np.sqrt(dx**2 + dy**2)
+    fire =  1 if distance < FIRE_RANGE and abs(angle_diff) < np.pi / 12 else -1 # 距离近且对准敌人
+
+    return a, phi, fire
+
+def control_strategy_C(drone, enemy_x, enemy_y):
+    # 参数配置（可以调优）
+    K_phi = 0.2
+    K_brake = 1.0
+    K_acc = 0.05
+    ANGLE_THRESHOLD = np.pi / 8  # ~22.5度以内才能加速
+    CLOSE_RANGE = 5.0
+    MAX_RANGE = 30.0
+
+    dx = enemy_x - drone.x
+    dy = enemy_y - drone.y
+    distance = np.hypot(dx, dy)
+    
+    # 敌人的相对角度
+    target_angle = np.arctan2(dy, dx)
+    current_angle = drone.orientation
+
+    # 角度误差归一化 [-pi, pi]
+    angle_diff = ((target_angle - current_angle + np.pi) % (2 * np.pi)) - np.pi
+
+    # ===== 角加速度控制 =====
+    # 控制目标角速度（希望的转速），目标角度越大希望转得越快
+    target_w = K_phi * angle_diff
+    # 加入阻尼（刹车项）避免一直转圈
+    phi = np.clip(target_w - K_brake * drone.w, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+
+    # ===== 加速度控制 =====
+    # 若角度误差较小才加速
+    if abs(angle_diff) < ANGLE_THRESHOLD:
+        # 距离越远，加速度越大；近处则放缓
+        acc_factor = min(distance / MAX_RANGE, 1.0)
+        a = K_acc * acc_factor
+    else:
+        a = 0  # 角度没对上，不加速
+
+    # ===== 发射控制 =====
+    fire = 1 if distance < FIRE_RANGE and abs(angle_diff) < np.pi / 12 else -1 # 距离近且对准敌人
+
+    return a, phi, fire
 
 
 
 
 
 
-
-class DroneReward():
-
-    def __init__(self, drones: list, actions: list, map_size=(900, 900), test_mode=False):
-        self.test_mode = test_mode
-        # Store values
+class GPTReward:
+    def __init__(self, drones, actions, team_win_bonus=10):
         self.drones = drones
-        self.num_drones = len(drones)
         self.actions = actions
-        self.map_size = map_size
-        self.rewards = np.zeros(self.num_drones)
-        # Parameters
-        self.alive_reward = 0.05
-        self.approach_reward_formula = lambda x: 0.7-(x/500000)
-        self.position_reward_base = 0.05
+        self.num_agents = len(drones)
+        self.rewards = np.zeros(self.num_agents)
+        self.rewards_on_type = [0, 0, 0]
 
-    # 存活奖励
-    def single_alive_reward(self, idx):
-        if self.drones[idx].alive:
-            return self.alive_reward
-        return 0
-    
-    def update_alive_reward(self):
-        for i in range(self.num_drones):
-            self.rewards[i] += self.single_alive_reward(i)
+    def _get_enemies(self, drone):
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
 
-    # 接近敌机奖励，越接近分数越高
-    def single_approach_reward(self, idx: int):
-        if self.drones[idx].alive==False:
-            return 0
-        # Nearest enemy
-        nearest_distance = 999999
-        for i in range(self.num_drones):
-            if self.drones[i].team != self.drones[idx].team:
-                delta_x, delta_y = abs(self.drones[i].x-self.drones[idx].x), abs(self.drones[i].y-self.drones[idx].y)
-                distance_square = delta_x**2 + delta_y**2
-                if distance_square <= nearest_distance:
-                    nearest_distance = distance_square
-        # Calculate reward
-        # print("Get nearest distance", nearest_distance)    100k unit
-        # distance_log = np.log10(nearest_distance)
-        return self.approach_reward_formula(nearest_distance)
-    
-    def update_approach_reward(self):
-        for i in range(self.num_drones):
-            self.rewards[i] += self.single_approach_reward(i)
-
-    # 位置奖励，越靠近中心分数越高
-    def single_position_reward(self, idx: int):
-        if self.drones[idx].alive==False:
-            return 0
-        x, y = self.drones[idx].x, self.drones[idx].y
-        x_max, y_max = self.map_size[0], self.map_size[1]
-        flag_x = 1 if (x>=0.33*x_max and x<=0.67*x_max) else 0
-        flag_y = 1 if (y>=0.33*y_max and y<=0.67*y_max) else 0
-        return (flag_x + flag_y) * self.position_reward_base
-    
-    def update_position_reward(self):
-        for i in range(self.num_drones):
-            self.rewards[i] += self.single_position_reward(i)
-
-    def _single_test_reward(self, idx: int):
-        return 1 if self.drones[idx].orientation==0 else 0
-    
-    def _update_test_reward(self):
-        for i in range(self.num_drones):
-            self.rewards[i] += self._single_test_reward(i)
-
-    # 统计全部并输出
     def update_and_return(self):
-        if self.test_mode:
-            self._update_test_reward()
-        else:
-            self.update_alive_reward()
-            self.update_approach_reward()
-            self.update_position_reward()
-        # print("Calculated rewards:", self.rewards)
+        for idx, drone in enumerate(self.drones):
+
+            # if not drone.alive:
+            #     self.rewards[idx] -= 1  # 死亡惩罚
+            #     continue
+
+            action = self.actions[idx]
+            enemies = self._get_enemies(drone)
+
+            # 生存奖励
+            self.rewards[idx] += 0.1
+            self.rewards_on_type[0] += 0.1
+
+            # 面朝敌人奖励（航向角误差）
+            if enemies:
+                nearest = min(enemies, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
+                dx, dy = nearest.x - drone.x, nearest.y - drone.y
+                target_angle = math.atan2(dy, dx)
+                angle_diff = abs((drone.orientation - target_angle + math.pi) % (2 * math.pi) - math.pi)
+                angle_reward = 0.2 * (1 - angle_diff / math.pi)
+                self.rewards[idx] += angle_reward
+                self.rewards_on_type[1] += angle_reward
+
+            # 发射判断
+            if drone.fire_cooltime <= 0 and action[2] > 0:
+                self.rewards[idx] += 0.5  # 鼓励主动攻击
+                self.rewards_on_type[1] += 0.5
+
         return self.rewards
+
+
+
+
+
+
     
 
 

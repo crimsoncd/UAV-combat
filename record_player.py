@@ -33,5 +33,5 @@ def film_play(record_file, play_epoch=[], play_speed=10):
 
 if __name__=="__main__":
 
-    play_file = r"record\record_foundertest3v3.jsonl"
+    play_file = r"uniform\10_reset2v2explore_C_compare\record_part_20.jsonl"
     film_play(play_file, play_epoch=[], play_speed=5)

@@ -15,7 +15,7 @@ import time
 
 from pathlib import Path
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 ACTION_DIMENSION = 3
 
@@ -66,9 +66,9 @@ class Actor(nn.Module):
 
 # Critic网络：输入全局状态+所有智能体动作
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, num_agents, hidden_dim=256):
+    def __init__(self, obs_dim, action_dim, num_agents, hidden_dim=256):
         super(Critic, self).__init__()
-        input_dim = state_dim + action_dim * num_agents
+        input_dim = obs_dim * num_agents + action_dim * num_agents
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
@@ -80,8 +80,8 @@ class Critic(nn.Module):
         )
         self.to(device)
     
-    def forward(self, states, actions):
-        x = torch.cat([states, actions], dim=1)
+    def forward(self, obss, actions):
+        x = torch.cat([obss, actions], dim=1)
         return self.net(x).to(device)
 
 class ReplayBuffer(deque):
@@ -150,10 +150,17 @@ class MADDPG:
         # state = noise_mask(state)
         actions = []
         for i in range(self.num_agents):
-            obs = self.env._get_obs(i)
-            obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-            action = self.actors[i](obs_tensor, noise_scale=self.noise_scale)[0].squeeze().detach().numpy()
-            actions.append(action)
+            # if i >= self.num_agents//2:
+            #     action = np.array([0, 0, -1])
+            #     actions.append(action)
+            if np.random.random() < self.epsilon:
+                action = np.array(self.env.induce_step(i))
+                actions.append(action)
+            else:
+                obs = self.env._get_obs(i)
+                obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+                action = self.actors[i](obs_tensor, noise_scale=self.noise_scale)[0].squeeze().detach().numpy()
+                actions.append(action)
         # print(actions)
         return actions
         # return actions.detach().numpy()
@@ -175,6 +182,7 @@ class MADDPG:
         critic_losses = []
 
         for i in range(self.num_agents):
+            
             # Update Critic
             with torch.no_grad():
                 target_acts = torch.cat([
@@ -216,15 +224,10 @@ class MADDPG:
             for target, param in zip(self.target_critics[i].parameters(), self.critics[i].parameters()):
                 target.data.copy_(self.noise_scale * param + (1 - self.noise_scale) * target)
 
-        # return np.mean(actor_losses), np.mean(critic_losses)
 
-            
-            # self.noise_scale *= self.noise_decay
-            # self.noise_scale -= self.noise_decrease
-            # self.noise_scale = max(self.noise_scale, 0)
-            # print(np.mean(actor_losses), np.mean(critic_losses))
         if len(actor_losses)*len(critic_losses)==0:
             return 0,0
+        
         return np.mean(actor_losses), np.mean(critic_losses)
 
 def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, task_code="test"):
@@ -235,15 +238,18 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
                    gamma=0.99,
                    noise=0.4,
                    noise_decay=0.999,
-                   epsilon=0,
-                   epsilon_decay=0.9995,
-                   actor_lr=1e-4,
+                   epsilon=0.6,
+                   epsilon_decay=0.999,
+                   actor_lr=2.5e-4,
                    critic_lr=1e-3
                    )
     
     rewards_log = []
     episode_rewards = []
     periodical_rewards = []
+
+    fixed_team = 1  # 假设蓝队（teamcode=1）为固定方
+    num_agents = env.total_agents
 
     uniform_path = Path("uniform") / task_code
     if not os.path.exists(uniform_path):
@@ -258,23 +264,31 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
 
         a_loss_episode = []
         c_loss_episode = []
-        film_record = []
 
         model_save_path = uniform_path / f"model_ep{ep}.pth"
         log_save_path = uniform_path / "log.txt"
         record_save_path = uniform_path / f"record_part_{ep//100}.jsonl"
         
         for _ in range(max_steps):
-            actions = agent.act(state)
-            # print(actions)
+            actions = []
+            for i in range(num_agents):
+                if env.drones[i].teamcode == fixed_team:
+                    action = np.random.uniform(-1, 1, 3)  # 随机策略
+                else:
+                    obs = env._get_obs(i)
+                    obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+                    action = agent.actors[i](obs_tensor, training=True)[0].detach().cpu().numpy()
+                actions.append(action)
+
             next_state, rewards, done, _ = env.step(actions)
-            # next_state, rewards, done, _ = env.step([a.cpu() if type(a)!=int else a for a in actions])
-            film_record.append(next_state.tolist())
+            agent.memory.add(state, actions, rewards, next_state, done)
+            # agent.update(batch_size)
+            state = next_state
 
             if is_render:
                 env.render()
             
-            agent.memory.add(state, actions, rewards, next_state, done)
+            # agent.memory.add(state, actions, rewards, next_state, done)
             al, cl = agent.update(batch_size)
             a_loss_episode.append(al)
             c_loss_episode.append(cl)
@@ -296,8 +310,9 @@ def train(env, episodes=3000, max_steps=200, batch_size=256, is_render=False, ta
             logfile.write(log_text+"\n")
             logfile.close()
 
-        agent.update_noise()
-        agent.update_epsilon()
+        if ep < 1000:
+            agent.update_noise()
+            agent.update_epsilon()
 
         episode_rewards.append(total_rewards[:].mean())
         periodical_rewards.append(total_rewards[:].mean())

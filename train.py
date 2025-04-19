@@ -1,17 +1,17 @@
 from env import BattleEnv
 from maddpg import MADDPG, train
 
-# Revised test
+
 
 
 
 # 运行训练
 if __name__ == "__main__":
 
-    # task_series = "F_commu"
-    task_code = "07_new_noise_complete_test"
+    # task_series = "F_commu"7
+    task_code = "12_Revised_1st"
 
-    env = BattleEnv(red_agents=5, blue_agents=5, auto_record=True)
+    env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train(env, episodes=3000, is_render=False, task_code=task_code)
 
     exit(0)

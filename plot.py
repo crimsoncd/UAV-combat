@@ -7,7 +7,7 @@ import re
 episodes, rewards, alosses, closses = [], [], [], []
 
 
-log_file = r"train\F_commu\pics\totallog_lstm3v3test.txt"
+log_file = r"uniform\12_Revised_1st\log.txt"
 pic_file = log_file[:-4] + ".png"
 
 # 解析日志数据（若从文件读取，替换为 with open("log.txt") as f: ...）
@@ -31,14 +31,14 @@ ax1.set_ylabel("Reward")
 ax1.grid(True, alpha=0.3)
 
 # 绘制 Actor Loss 曲线
-ax2.plot(episodes[100:1600], alosses[100:1600], "r-", linewidth=1)
+ax2.plot(episodes[10:], alosses[10:], "r-", linewidth=1)
 ax2.set_title("Actor Loss per Episode")
 ax2.set_xlabel("Episode")
 ax2.set_ylabel("Actor Loss")
 ax2.grid(True, alpha=0.3)
 
 # 绘制 Critic Loss 曲线
-ax3.plot(episodes[100:2000], closses[100:2000], "g-", linewidth=1)
+ax3.plot(episodes[10:], closses[10:], "g-", linewidth=1)
 ax3.set_title("Critic Loss per Episode")
 ax3.set_xlabel("Episode")
 ax3.set_ylabel("Critic Loss")
