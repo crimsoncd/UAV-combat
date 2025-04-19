@@ -77,10 +77,10 @@ class ReplayBuffer:
         batch = random.sample(self.buffer, batch_size)
         obs, actions, rewards, next_obs, dones = zip(*batch)
 
-        obs = torch.FloatTensor(obs).to(device)            # [batch, num_agents, obs_dim]
-        actions = torch.FloatTensor(actions).to(device)
-        rewards = torch.FloatTensor(rewards).to(device)
-        next_obs = torch.FloatTensor(next_obs).to(device)
+        obs = torch.FloatTensor(np.array(obs)).to(device)            # [batch, num_agents, obs_dim]
+        actions = torch.FloatTensor(np.array(actions)).to(device)
+        rewards = torch.FloatTensor(np.array(rewards)).to(device)
+        next_obs = torch.FloatTensor(np.array(next_obs)).to(device)
         dones = torch.FloatTensor(dones).unsqueeze(1).to(device)
         return obs, actions, rewards, next_obs, dones
 
@@ -88,7 +88,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class MADDPG:
-    def __init__(self, env, gamma=0.99, noise=1, noise_decay=0.9995, epsilon=1, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
+    def __init__(self, env, gamma=0.99, noise=0.4, noise_decay=0.9995, epsilon=0.6, epsilon_decay=0.9995, actor_lr=1e-4, critic_lr=1e-3):
         self.env = env
         self.num_agents = env.total_agents
         self.state_dim = len(env.reset())
@@ -178,7 +178,7 @@ class MADDPG:
 
             with torch.no_grad():
                 target_acts = [self.target_actors[j](next_obs_batch[:, j, :]) for j in range(self.num_agents)]
-                target_acts_cat = torch.cat(target_acts, dim=1)
+                target_acts_cat = torch.cat(target_acts, dim=1).to(device)
                 target_q = self.target_critics[i](all_next_obs, target_acts_cat)
                 target_q = rew_batch[:, i].unsqueeze(1) + (1 - done_batch) * self.gamma * target_q
 
@@ -189,7 +189,7 @@ class MADDPG:
             self.critic_optimizers[i].step()
 
             curr_acts = [self.actors[j](obs_batch[:, j, :]).detach() if j != i else self.actors[j](obs_batch[:, j, :]) for j in range(self.num_agents)]
-            curr_acts_cat = torch.cat(curr_acts, dim=1)
+            curr_acts_cat = torch.cat(curr_acts, dim=1).to(device)
             actor_loss = -self.critics[i](all_obs, curr_acts_cat).mean()
             self.actor_optimizers[i].zero_grad()
             actor_loss.backward()
