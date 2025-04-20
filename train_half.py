@@ -126,24 +126,6 @@ class MADDPG:
             return
         self.epsilon *= self.epsilon_decay
     
-    # def act(self, state):
-    #     # state = noise_mask(state)
-    #     actions = []
-    #     for i in range(self.num_agents):
-    #         # if i >= self.num_agents//2:
-    #         #     action = np.array([0, 0, -1])
-    #         #     actions.append(action)
-    #         if np.random.random() < self.epsilon:
-    #             action = np.array(self.env.induce_step(i))
-    #             actions.append(action)
-    #         else:
-    #             obs = self.env._get_obs(i)
-    #             obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-    #             action = self.actors[i](obs_tensor, noise_scale=self.noise_scale)[0].squeeze().detach().numpy()
-    #             actions.append(action)
-    #     # print(actions)
-    #     return actions
-    #     # return actions.detach().numpy()
 
     def select_action(self, obs_n):
         actions = []
@@ -225,9 +207,20 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
                    critic_lr=critic_lr
                    )
 
+    import matplotlib.pyplot as plt
+    # from IPython.display import clear_output
+    plt.ion()  # 开启交互模式
+    
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12))
+    plt.close(fig) 
+    
     rewards_log = []
     episode_rewards = []
     periodical_rewards = []
+
+    reward_history = []
+    actor_loss_history = []
+    critic_loss_history = []
 
     uniform_path = Path("uniform") / task_code
     if not os.path.exists(uniform_path):
@@ -279,7 +272,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         avg_reward = total_rewards.mean()
         rewards_log.append(avg_reward)
         log_text = f"Episode {ep+1}, Reward:{avg_reward:.2f}, Noise:{maddpg.noise_scale:.3f}, epsilon:{maddpg.epsilon: .3f}, aloss:{np.mean(a_loss_episode): .3f}, closs:{np.mean(c_loss_episode): .3f}, time:{time_cosumed: .2f}"
-        print(log_text)
+        # print(log_text)
         with open(log_save_path, "a") as logfile:
             logfile.write(log_text+"\n")
             logfile.close()
@@ -292,10 +285,39 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         periodical_rewards.append(total_rewards[:].mean())
 
         env.save_and_clear(ep, record_save_path)
+
+        reward_history.append(avg_reward)
+        actor_loss_history.append(np.mean(a_loss_episode))
+        critic_loss_history.append(np.mean(c_loss_episode))
+        
+        # 动态更新图像
+        # clear_output(wait=True)
+        plt.close(fig)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
+        
+        # ax1.clear()
+        ax1.plot(reward_history, label='Reward', color='blue')
+        ax1.set_title(f'Episode {ep+1} - Avg Reward: {avg_reward:.2f}')
+        ax1.legend()
+        
+        # ax2.clear()
+        ax2.plot(actor_loss_history, label='Actor Loss', color='red')
+        ax2.set_title('Actor Loss')
+        ax2.legend()
+        
+        # ax3.clear()
+        ax3.plot(critic_loss_history, label='Critic Loss', color='green')
+        ax3.set_title('Critic Loss')
+        ax3.legend()
+        
+        plt.tight_layout()
+        plt.show()
+        plt.pause(0.1)  # 短暂暂停避免图像闪烁
         
         if ep % 100 == 0:
             torch.save(maddpg.actors[0].state_dict(), model_save_path)
 
+    plt.ioff()  # 关闭交互模式
     return maddpg
 
 
@@ -305,7 +327,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "13_Half_CTDE_test"
+    task_code = "13_Half_CTDE_test_board"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code)
@@ -323,4 +345,3 @@ if __name__ == "__main__":
             state = env.reset()
         else:
             state = next_state
-

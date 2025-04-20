@@ -178,13 +178,15 @@ class GPTReward:
             enemies = self._get_enemies(drone)
 
             # 生存奖励
-            self.rewards[idx] += 0.1
-            self.rewards_on_type[0] += 0.1
+            # self.rewards[idx] += 0.1
+            # self.rewards_on_type[0] += 0.1
 
             # 面朝敌人奖励（航向角误差）
             if enemies:
                 nearest = min(enemies, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
                 dx, dy = nearest.x - drone.x, nearest.y - drone.y
+                if dx**2 + dy**2 >= 200**2:
+                    break
                 target_angle = math.atan2(dy, dx)
                 angle_diff = abs((drone.orientation - target_angle + math.pi) % (2 * math.pi) - math.pi)
                 angle_reward = 0.2 * (1 - angle_diff / math.pi)
@@ -192,9 +194,9 @@ class GPTReward:
                 self.rewards_on_type[1] += angle_reward
 
             # 发射判断
-            if drone.fire_cooltime <= 0 and action[2] > 0:
-                self.rewards[idx] += 0.5  # 鼓励主动攻击
-                self.rewards_on_type[1] += 0.5
+            # if drone.fire_cooltime <= 0 and action[2] > 0:
+            #     self.rewards[idx] += 0.5  # 鼓励主动攻击
+            #     self.rewards_on_type[1] += 0.5
 
         return self.rewards
 
