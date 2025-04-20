@@ -188,7 +188,7 @@ class GPTReward:
                 if dx**2 + dy**2 >= 200**2:
                     break
                 target_angle = math.atan2(dy, dx)
-                angle_diff = abs((drone.orientation - target_angle + math.pi) % (2 * math.pi) - math.pi)
+                angle_diff = abs((drone.orientation - target_angle) % (2 * math.pi) - math.pi)
                 angle_reward = 0.2 * (1 - angle_diff / math.pi)
                 self.rewards[idx] += angle_reward
                 self.rewards_on_type[1] += angle_reward
