@@ -266,7 +266,7 @@ class BattleEnv:
 
         return env_utils.control_strategy_C(drone, target_e.x, target_e.y)
 
-    def step(self, actions):
+    def step(self, actions, return_half_reward=False):
         """执行动作"""
         rewards = np.zeros(self.total_agents)
         
@@ -334,10 +334,13 @@ class BattleEnv:
         done = not (any(d.alive for d in self.drones[:self.red_agents]) and 
                     any(d.alive for d in self.drones[self.red_agents:]))
         
-        # rewards = rewards[:num_drones//2]
-        rewards = rewards[:]
+        obs_n = self._get_obs_all()
         
-        return self._get_obs_all(), rewards, done, {}
+        if return_half_reward:
+            rewards = rewards[:self.total_agents//2]
+            # obs_n = obs_n[:self.total_agents//2]
+        
+        return obs_n, rewards, done, {}
     
 
 

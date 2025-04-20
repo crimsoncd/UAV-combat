@@ -213,7 +213,7 @@ class MADDPG:
 
 
 
-def train_Revised(env, actor_cls=1e-4, critic_cls=1e-3, episodes=3000, max_steps=200, batch_size=256, is_render=False, task_code="test"):
+def train_Revised(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=200, batch_size=256, is_render=False, task_code="test"):
     
     print("Using device:", device)
     
@@ -223,8 +223,8 @@ def train_Revised(env, actor_cls=1e-4, critic_cls=1e-3, episodes=3000, max_steps
                    noise_decay=0.999,
                    epsilon=0.6,
                    epsilon_decay=0.999,
-                   actor_lr=2.5e-4,
-                   critic_lr=1e-3
+                   actor_lr=actor_lr,
+                   critic_lr=critic_lr
                    )
 
     rewards_log = []
