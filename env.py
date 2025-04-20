@@ -338,9 +338,10 @@ class BattleEnv:
         
         if return_half_reward:
             rewards = rewards[:self.total_agents//2]
+            drones_rewards = drones_rewards[:self.total_agents//2]
             # obs_n = obs_n[:self.total_agents//2]
         
-        return obs_n, rewards, done, {}
+        return obs_n, drones_rewards, done, {}
     
 
 

@@ -199,7 +199,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
     
     maddpg = MADDPG(env,
                    gamma=0.99,
-                   noise=0.4,
+                   noise=0.2,
                    noise_decay=0.999,
                    epsilon=0.6,
                    epsilon_decay=0.999,
@@ -211,8 +211,8 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
     # from IPython.display import clear_output
     plt.ion()  # 开启交互模式
     
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12))
-    plt.close(fig) 
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
+    # plt.close(fig) 
     
     rewards_log = []
     episode_rewards = []
@@ -277,7 +277,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
             logfile.write(log_text+"\n")
             logfile.close()
 
-        if ep < 1500:
+        if ep < 1000:
             maddpg.update_noise()
             maddpg.update_epsilon()
 
@@ -292,20 +292,20 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         
         # 动态更新图像
         # clear_output(wait=True)
-        plt.close(fig)
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
+        # plt.close(fig)
+        # fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
         
-        # ax1.clear()
+        ax1.clear()
         ax1.plot(reward_history, label='Reward', color='blue')
         ax1.set_title(f'Episode {ep+1} - Avg Reward: {avg_reward:.2f}')
         ax1.legend()
         
-        # ax2.clear()
+        ax2.clear()
         ax2.plot(actor_loss_history, label='Actor Loss', color='red')
         ax2.set_title('Actor Loss')
         ax2.legend()
         
-        # ax3.clear()
+        ax3.clear()
         ax3.plot(critic_loss_history, label='Critic Loss', color='green')
         ax3.set_title('Critic Loss')
         ax3.legend()
@@ -316,6 +316,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         
         if ep % 100 == 0:
             torch.save(maddpg.actors[0].state_dict(), model_save_path)
+            plt.savefig(uniform_path / f"figure_ep{ep}.png")
 
     plt.ioff()  # 关闭交互模式
     return maddpg
@@ -327,7 +328,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "13_Half_CTDE_test_board"
+    task_code = "14__Reward_test_Smooth"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code)

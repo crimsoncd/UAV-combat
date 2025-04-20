@@ -166,8 +166,27 @@ class GPTReward:
 
     def _get_enemies(self, drone):
         return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
-
+    
     def update_and_return(self):
+
+        rewards_sample = np.zeros(self.num_agents)
+        # print("Using test reward method...")
+
+        for idx, drone in enumerate(self.drones):
+
+            if not drone.alive:
+                continue
+
+            action = self.actions[idx]
+            reward_scale = 1
+
+            rewards_sample[idx] += reward_scale * (1 - abs(action[0]))
+            rewards_sample[idx] += reward_scale * (1 - abs(action[1]))
+            rewards_sample[idx] += reward_scale * (1 - abs(action[2]))
+
+        return rewards_sample
+
+    def update_and_return_real(self):
         for idx, drone in enumerate(self.drones):
 
             if not drone.alive:
@@ -178,8 +197,8 @@ class GPTReward:
             enemies = self._get_enemies(drone)
 
             # 生存奖励
-            # self.rewards[idx] += 0.1
-            # self.rewards_on_type[0] += 0.1
+            self.rewards[idx] += 0.1
+            self.rewards_on_type[0] += 0.1
 
             # 面朝敌人奖励（航向角误差）
             if enemies:
@@ -194,9 +213,9 @@ class GPTReward:
                 self.rewards_on_type[1] += angle_reward
 
             # 发射判断
-            # if drone.fire_cooltime <= 0 and action[2] > 0:
-            #     self.rewards[idx] += 0.5  # 鼓励主动攻击
-            #     self.rewards_on_type[1] += 0.5
+            if drone.fire_cooltime <= 0 and action[2] > 0:
+                self.rewards[idx] += 0.5  # 鼓励主动攻击
+                self.rewards_on_type[1] += 0.5
 
         return self.rewards
 
