@@ -9,7 +9,7 @@ from maddpg import MADDPG, train, train_Revised
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "12_Revised_2nd_CTDE_cuda"
+    task_code = "12_Revised_2nd_CTDE_renet"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Revised(env, episodes=3000, is_render=False, task_code=task_code)

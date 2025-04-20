@@ -170,9 +170,9 @@ class GPTReward:
     def update_and_return(self):
         for idx, drone in enumerate(self.drones):
 
-            # if not drone.alive:
-            #     self.rewards[idx] -= 1  # 死亡惩罚
-            #     continue
+            if not drone.alive:
+                # self.rewards[idx] -= 1  # 死亡惩罚
+                continue
 
             action = self.actions[idx]
             enemies = self._get_enemies(drone)

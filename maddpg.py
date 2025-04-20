@@ -54,10 +54,10 @@ class Critic(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
-            nn.BatchNorm1d(256),
+            # nn.BatchNorm1d(256),
             nn.Linear(256, 64),
             nn.ReLU(),
-            nn.BatchNorm1d(64),
+            # nn.BatchNorm1d(64),
             nn.Linear(64, 1)
         )
         self.to(device)
@@ -217,7 +217,15 @@ def train_Revised(env, actor_cls=1e-4, critic_cls=1e-3, episodes=3000, max_steps
     
     print("Using device:", device)
     
-    maddpg = MADDPG(env)
+    maddpg = MADDPG(env,
+                   gamma=0.99,
+                   noise=0.4,
+                   noise_decay=0.999,
+                   epsilon=0.6,
+                   epsilon_decay=0.999,
+                   actor_lr=2.5e-4,
+                   critic_lr=1e-3
+                   )
 
     rewards_log = []
     episode_rewards = []
@@ -277,7 +285,7 @@ def train_Revised(env, actor_cls=1e-4, critic_cls=1e-3, episodes=3000, max_steps
             logfile.write(log_text+"\n")
             logfile.close()
 
-        if ep < 1000:
+        if ep < 1500:
             maddpg.update_noise()
             maddpg.update_epsilon()
 

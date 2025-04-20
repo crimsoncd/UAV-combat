@@ -7,7 +7,7 @@ import re
 episodes, rewards, alosses, closses = [], [], [], []
 
 
-log_file = r"uniform\12_Revised_1st\log.txt"
+log_file = r"uniform\12_Revised_2nd_CTDE_cuda\log.txt"
 pic_file = log_file[:-4] + ".png"
 
 # 解析日志数据（若从文件读取，替换为 with open("log.txt") as f: ...）
