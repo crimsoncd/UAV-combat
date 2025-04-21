@@ -125,6 +125,16 @@ class MADDPG:
         if self.epsilon==0:
             return
         self.epsilon *= self.epsilon_decay
+
+    def debug_test_critic(self, log_path, epoch_num, obs, actions):
+        obs = torch.FloatTensor(np.array(obs)).view(1, -1).to(device)
+        actions = torch.FloatTensor(np.array(actions)).view(1, -1).to(device)
+        # print(obs.shape, actions.shape)
+        with torch.no_grad():
+            sample_q = self.critics[0](obs, actions)
+            debug_text = f"[Debug] epoch{epoch_num} Critic[0] Q mean: {sample_q.mean():.2f}, std: {sample_q.std():.2f}\n"
+        with open(log_path, "a") as lp:
+            lp.write(debug_text)
     
 
     def select_action(self, obs_n):
@@ -193,14 +203,14 @@ class MADDPG:
 
 
 
-def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=200, batch_size=256, is_render=False, task_code="test"):
+def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=200, batch_size=256, is_render=False, task_code="test", debug=False):
     
     print("Using device:", device)
     
     maddpg = MADDPG(env,
                    gamma=0.99,
                    noise=0.2,
-                   noise_decay=0.999,
+                   noise_decay=0.9995,
                    epsilon=0.6,
                    epsilon_decay=0.999,
                    actor_lr=actor_lr,
@@ -226,6 +236,8 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
     if not os.path.exists(uniform_path):
         os.mkdir(uniform_path)
 
+    total_step = 0
+
     for ep in range(episodes):
 
         ep_start_time = time.time()
@@ -246,6 +258,8 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 
         for _ in range(max_steps):
 
+            total_step += 1
+
             actions = maddpg.select_action(obs_n)
             next_obs_n, rewards, done, _ = env.step(actions, return_half_reward=True)
             next_obs_n = next_obs_n[:env.total_agents // 2]
@@ -255,10 +269,11 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
                 env.render()
 
             maddpg.memory.add(obs_n, actions[:env.total_agents//2], rewards, next_obs_n, float(done))
-            al, cl = maddpg.update(batch_size)
+            if total_step%2 == 0:
+                al, cl = maddpg.update(batch_size)
 
-            a_loss_episode.append(al)
-            c_loss_episode.append(cl)
+                a_loss_episode.append(al)
+                c_loss_episode.append(cl)
 
             obs_n = next_obs_n
             total_rewards += rewards
@@ -289,6 +304,10 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         reward_history.append(avg_reward)
         actor_loss_history.append(np.mean(a_loss_episode))
         critic_loss_history.append(np.mean(c_loss_episode))
+
+        if debug:
+            maddpg.debug_test_critic(log_path=uniform_path/"debug_log.txt", epoch_num=ep,
+                                     obs=obs_n, actions=actions[:env.total_agents//2])
         
         # 动态更新图像
         # clear_output(wait=True)
@@ -328,10 +347,10 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "14__Reward_test_Smooth"
+    task_code = "14_Reward_test_Smooth_debug"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
-    rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code)
+    rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code, debug=True)
 
     exit(0)
     
