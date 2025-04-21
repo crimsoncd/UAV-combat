@@ -184,6 +184,8 @@ class GPTReward:
             rewards_sample[idx] += reward_scale * (1 - abs(action[1]))
             rewards_sample[idx] += reward_scale * (1 - abs(action[2]))
 
+            rewards_sample[idx] -= reward_scale * 1.5
+
         return rewards_sample
 
     def update_and_return_real(self):

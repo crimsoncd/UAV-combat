@@ -221,7 +221,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 
     import matplotlib.pyplot as plt
     # from IPython.display import clear_output
-    plt.ion()  # 开启交互模式
+    # plt.ion()  # 开启交互模式
     
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
     # plt.close(fig) 
@@ -289,7 +289,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         avg_reward = total_rewards.mean()
         rewards_log.append(avg_reward)
         log_text = f"Episode {ep+1}, Reward:{avg_reward:.2f}, Noise:{maddpg.noise_scale:.3f}, epsilon:{maddpg.epsilon: .3f}, aloss:{np.mean(a_loss_episode): .3f}, closs:{np.mean(c_loss_episode): .3f}, time:{time_cosumed: .2f}"
-        # print(log_text)
+        print(log_text)
         with open(log_save_path, "a") as logfile:
             logfile.write(log_text+"\n")
             logfile.close()
@@ -332,14 +332,14 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         ax3.legend()
         
         plt.tight_layout()
-        plt.show()
-        plt.pause(0.1)  # 短暂暂停避免图像闪烁
+        #  plt.show()
+        # plt.pause(0.1)  # 短暂暂停避免图像闪烁
         
         if ep % 100 == 0:
             torch.save(maddpg.actors[0].state_dict(), model_save_path)
             plt.savefig(uniform_path / f"figure_ep{ep}.png")
 
-    plt.ioff()  # 关闭交互模式
+    # plt.ioff()  # 关闭交互模式
     return maddpg
 
 
@@ -349,7 +349,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "16_Reward_test_noise_once"
+    task_code = "16_Reward_test_noise_once_d"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code, debug=True)
