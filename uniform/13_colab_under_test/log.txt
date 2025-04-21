@@ -1,0 +1,2 @@
+Episode 1, Reward:112.87, Noise:0.400, epsilon: 0.600, aloss: 0.000, closs: 0.000, time: 0.46
+Episode 2, Reward:109.36, Noise:0.400, epsilon: 0.599, aloss: 3.158, closs: 15.936, time: 4.40

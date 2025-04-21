@@ -135,7 +135,7 @@ class MADDPG:
             if i < self.num_agents:
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
                 act = self.actors[i](obs_tensor)[0].detach().cpu().numpy()
-                if np.random.random < self.epsilon:
+                if np.random.random() < self.epsilon:
                     act += np.random.normal(0, self.noise_scale, size=act.shape)
                 act = np.clip(act, -1, 1)
                 actions.append(act)
@@ -294,7 +294,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         
         # 动态更新图像
         # clear_output(wait=True)
-        # plt.close(fig)
+        plt.close(fig)
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
         
         ax1.clear()
@@ -332,7 +332,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "15_lab_server_Rewardtest"
+    task_code = "15_lab_server_Rewardtest_b"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code)
