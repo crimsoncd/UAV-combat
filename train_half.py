@@ -50,6 +50,7 @@ class Critic(nn.Module):
     def __init__(self, obs_dim, action_dim, num_agents, hidden_dim=256):
         super(Critic, self).__init__()
         input_dim = obs_dim * num_agents + action_dim * num_agents
+        self.norm = nn.LayerNorm(input_dim)
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
@@ -63,6 +64,7 @@ class Critic(nn.Module):
     
     def forward(self, obss, actions):
         x = torch.cat([obss, actions], dim=1)
+        x = self.norm(x)
         return self.net(x).to(device)
 
 class ReplayBuffer:
