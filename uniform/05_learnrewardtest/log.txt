@@ -1,0 +1,25 @@
+Episode 1, Reward:9.70, Noise:1.000, epsilon: 1.000, aloss: 0.000, closs: 0.000, time: 0.08
+Episode 2, Reward:8.90, Noise:0.997, epsilon: 1.000, aloss:-0.009, closs: 0.006, time: 0.19
+Episode 3, Reward:8.30, Noise:0.994, epsilon: 0.999, aloss:-0.427, closs: 0.030, time: 0.61
+Episode 4, Reward:10.45, Noise:0.991, epsilon: 0.999, aloss:-2.021, closs: 0.064, time: 1.00
+Episode 5, Reward:3.35, Noise:0.988, epsilon: 0.998, aloss:-3.512, closs: 0.109, time: 0.26
+Episode 6, Reward:11.80, Noise:0.985, epsilon: 0.998, aloss:-3.808, closs: 0.113, time: 1.13
+Episode 7, Reward:1.30, Noise:0.982, epsilon: 0.997, aloss:-4.002, closs: 0.086, time: 0.11
+Episode 8, Reward:13.65, Noise:0.979, epsilon: 0.997, aloss:-3.948, closs: 0.117, time: 1.13
+Episode 9, Reward:10.25, Noise:0.976, epsilon: 0.996, aloss:-4.094, closs: 0.102, time: 0.79
+Episode 10, Reward:9.20, Noise:0.973, epsilon: 0.996, aloss:-4.458, closs: 0.107, time: 0.74
+Episode 11, Reward:9.65, Noise:0.970, epsilon: 0.995, aloss:-4.268, closs: 0.114, time: 0.79
+Episode 12, Reward:12.85, Noise:0.967, epsilon: 0.995, aloss:-4.363, closs: 0.110, time: 1.08
+Episode 13, Reward:3.00, Noise:0.965, epsilon: 0.994, aloss:-4.356, closs: 0.122, time: 0.26
+Episode 14, Reward:11.80, Noise:0.962, epsilon: 0.994, aloss:-4.232, closs: 0.112, time: 0.93
+Episode 15, Reward:1.00, Noise:0.959, epsilon: 0.993, aloss:-4.212, closs: 0.111, time: 0.09
+Episode 16, Reward:14.30, Noise:0.956, epsilon: 0.993, aloss:-4.093, closs: 0.117, time: 1.09
+Episode 17, Reward:10.10, Noise:0.953, epsilon: 0.992, aloss:-4.100, closs: 0.111, time: 0.83
+Episode 18, Reward:0.85, Noise:0.950, epsilon: 0.992, aloss:-4.362, closs: 0.147, time: 0.07
+Episode 19, Reward:1.75, Noise:0.947, epsilon: 0.991, aloss:-4.311, closs: 0.110, time: 0.15
+Episode 20, Reward:0.20, Noise:0.945, epsilon: 0.991, aloss:-4.309, closs: 0.047, time: 0.02
+Episode 21, Reward:13.15, Noise:0.942, epsilon: 0.990, aloss:-4.202, closs: 0.122, time: 1.08
+Episode 22, Reward:13.50, Noise:0.939, epsilon: 0.990, aloss:-4.037, closs: 0.113, time: 1.10
+Episode 23, Reward:4.95, Noise:0.936, epsilon: 0.989, aloss:-4.159, closs: 0.114, time: 0.42
+Episode 24, Reward:7.90, Noise:0.933, epsilon: 0.989, aloss:-4.166, closs: 0.114, time: 0.70
+Episode 25, Reward:2.50, Noise:0.930, epsilon: 0.988, aloss:-4.167, closs: 0.126, time: 0.25

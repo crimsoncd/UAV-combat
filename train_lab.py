@@ -50,6 +50,7 @@ class Critic(nn.Module):
     def __init__(self, obs_dim, action_dim, num_agents, hidden_dim=256):
         super(Critic, self).__init__()
         input_dim = obs_dim * num_agents + action_dim * num_agents
+        self.norm = nn.LayerNorm(input_dim)
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
@@ -63,6 +64,7 @@ class Critic(nn.Module):
     
     def forward(self, obss, actions):
         x = torch.cat([obss, actions], dim=1)
+        x = self.norm(x)
         return self.net(x).to(device)
 
 class ReplayBuffer:
@@ -133,7 +135,8 @@ class MADDPG:
             if i < self.num_agents:
                 obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
                 act = self.actors[i](obs_tensor)[0].detach().cpu().numpy()
-                act += np.random.normal(0, self.noise_scale, size=act.shape)
+                if np.random.random < self.epsilon:
+                    act += np.random.normal(0, self.noise_scale, size=act.shape)
                 act = np.clip(act, -1, 1)
                 actions.append(act)
         for i in range(len(obs_n)):
@@ -329,7 +332,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "15_lab_server_test"
+    task_code = "15_lab_server_Rewardtest"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code)
