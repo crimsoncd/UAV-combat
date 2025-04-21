@@ -38,10 +38,10 @@ class Actor(nn.Module):
 
     def forward(self, state, training=True, noise_scale=0.1):
         out = self.net(state)
-        if training:
-            # 训练时添加噪声
-            noise = torch.randn_like(out) * noise_scale
-            out = torch.clamp(out + noise, -1, 1)
+        # if training:
+        #     # 训练时添加噪声
+        #     noise = torch.randn_like(out) * noise_scale
+        #     out = torch.clamp(out + noise, -1, 1)
         return out.cpu()
     
 
@@ -347,7 +347,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "14_Reward_test_Smooth_debug"
+    task_code = "16_Reward_test_noise_once"
 
     env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
     rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code, debug=True)
