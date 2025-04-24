@@ -141,6 +141,7 @@ class BattleEnv:
             self.battle_idx = 0
             self.frame_idx = 0
             self.records = []
+            self.reward_records = []
 
     def _init_drones(self):
         """初始化无人机位置"""
@@ -249,6 +250,26 @@ class BattleEnv:
             f.write(json.dumps(epoch_record) + '\n')  # 注意换行符
         self.records = []
 
+    def _record_reward(self, reward_breakdown_list):
+        frame = {
+            "battle_index": self.battle_idx,
+            "frame_index": self.frame_idx,
+            "rewards": reward_breakdown_list
+        }
+        # print(frame)
+        self.reward_records.append(frame)
+
+    def save_and_clear_rewards(self, epoch_num, record_path):
+        if not self.auto_record:
+            return
+        epoch_record = {
+            "epoch": epoch_num,
+            "frames": self.reward_records
+        }
+        with open(record_path, 'a') as f:
+            f.write(json.dumps(epoch_record) + '\n')  # 注意换行符
+        self.reward_records = []
+
     def set_frame_data(self, frame_data):
         for obj in frame_data:
             if obj["type"]=="Drone":
@@ -320,15 +341,17 @@ class BattleEnv:
                 else:
                     rewards[missile.id] += 1
 
-        # 保存记录
-        if self.auto_record:
-            self._record_frame()
-            self.frame_idx += 1
 
-        DronesReward = env_utils.GPTReward(self.drones, actions)
+        DronesReward = env_utils.DroneRewardSecond(self.drones, actions)
         drones_rewards = DronesReward.update_and_return()
         # rewards = np.add(rewards, drones_rewards)
         rewards = drones_rewards
+
+        # 保存记录
+        if self.auto_record:
+            self._record_frame()
+            self._record_reward(DronesReward.get_reward_log())
+            self.frame_idx += 1
 
         # 检查终止条件
         done = not (any(d.alive for d in self.drones[:self.red_agents]) and 

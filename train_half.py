@@ -50,7 +50,8 @@ class Critic(nn.Module):
     def __init__(self, obs_dim, action_dim, num_agents, hidden_dim=256):
         super(Critic, self).__init__()
         input_dim = obs_dim * num_agents + action_dim * num_agents
-        self.norm = nn.LayerNorm(input_dim)
+        # self.norm = nn.LayerNorm(input_dim)
+        self.norm = nn.BatchNorm1d(input_dim)
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
@@ -143,10 +144,14 @@ class MADDPG:
         actions = []
         for i, obs in enumerate(obs_n):
             if i < self.num_agents:
-                obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
-                act = self.actors[i](obs_tensor)[0].detach().cpu().numpy()
-                act += np.random.normal(0, self.noise_scale, size=act.shape)
-                act = np.clip(act, -1, 1)
+                if False:
+                    act = np.zeros(3)
+                else:
+                    obs_tensor = torch.FloatTensor(obs).unsqueeze(0).to(device)
+                    act = self.actors[i](obs_tensor)[0].detach().cpu().numpy()
+                    if np.random.random() < self.epsilon:
+                        act += np.random.normal(0, self.noise_scale, size=act.shape)
+                    act = np.clip(act, -1, 1)
                 actions.append(act)
         for i in range(len(obs_n)):
             random_action = np.random.random(3) * 2 - 1
@@ -211,10 +216,10 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
     
     maddpg = MADDPG(env,
                    gamma=0.99,
-                   noise=0.2,
+                   noise=0.4,
                    noise_decay=0.9995,
                    epsilon=0.6,
-                   epsilon_decay=0.999,
+                   epsilon_decay=0.99,
                    actor_lr=actor_lr,
                    critic_lr=critic_lr
                    )
@@ -253,6 +258,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         model_save_path = uniform_path / f"model_ep{ep}.pth"
         log_save_path = uniform_path / "log.txt"
         record_save_path = uniform_path / f"record_part_{ep//100}.jsonl"
+        reward_save_path = uniform_path / f"reward_part_{ep//100}.jsonl"
 
         # obs_n = [env._get_obs(i) for i in range(env.total_agents)]
         obs_n = env._get_obs_all()[:env.total_agents // 2]
@@ -302,6 +308,7 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
         periodical_rewards.append(total_rewards[:].mean())
 
         env.save_and_clear(ep, record_save_path)
+        env.save_and_clear_rewards(ep, reward_save_path)
 
         reward_history.append(avg_reward)
         actor_loss_history.append(np.mean(a_loss_episode))
@@ -349,10 +356,10 @@ def train_Half(env, actor_lr=2.5e-4, critic_lr=1e-3, episodes=3000, max_steps=20
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "16_Reward_test_noise_once_d"
+    task_code = "18_Rewards3v3_a"
 
-    env = BattleEnv(red_agents=2, blue_agents=2, auto_record=True)
-    rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code, debug=True)
+    env = BattleEnv(red_agents=3, blue_agents=3, auto_record=True)
+    rewards = train_Half(env, episodes=3000, is_render=False, task_code=task_code, debug=False)
 
     exit(0)
     
