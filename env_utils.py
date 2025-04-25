@@ -341,3 +341,113 @@ class DroneRewardSecond:
         #         print(key, breakdown[key], type(breakdown[key]))
         #     exit(9)
         return self.reward_breakdown_log
+    
+
+
+class CurriculumReward:
+    def __init__(self, drones: list, actions: list, task_type="task1", debug=False):
+        self.drones = drones
+        self.actions = actions
+        self.task_type = task_type
+        self.debug = debug
+        self.reward_breakdown_log = []
+        self.last_positions = {drone.id: (drone.x, drone.y) for drone in drones}
+
+    def _get_enemies(self, drone):
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
+
+    def update_and_return(self):
+        rewards = np.zeros(len(self.drones))
+
+        for idx, drone in enumerate(self.drones):
+            breakdown = {
+                'id': drone.id,
+                'team': drone.team,
+                'alive': int(drone.alive),
+                'reward_survive': 0.0,
+                'reward_kill': 0.0,
+                'reward_facing': 0.0,
+                'reward_fire': 0.0,
+                'reward_border': 0.0,
+                'reward_distance': 0.0,
+                'reward_team_cohesion': 0.0,
+                'total': 0.0
+            }
+
+            if not drone.alive:
+                rewards[idx] -= 1.0
+                breakdown['total'] = -1.0
+                self.reward_breakdown_log.append(breakdown)
+                continue
+
+            # ===== 通用奖励项 =====
+            rewards[idx] += 0.1
+            breakdown['reward_survive'] = 0.1
+
+            action = self.actions[idx]
+            enemies = self._get_enemies(drone)
+
+            # ===== 针对阶段的奖励逻辑 =====
+            if self.task_type == "task1":
+                # 击杀奖励（任何敌人）
+                for enemy in enemies:
+                    if not enemy.alive:
+                        rewards[idx] += 1.0
+                        breakdown['reward_kill'] += 1.0
+
+                # 面朝敌人奖励
+                if enemies:
+                    nearest = min(enemies, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
+                    dx, dy = nearest.x - drone.x, nearest.y - drone.y
+                    target_angle = math.atan2(dy, dx)
+                    angle_diff = abs((drone.orientation - target_angle + math.pi) % (2 * math.pi) - math.pi)
+                    facing_reward = 0.2 * (1 - angle_diff / math.pi)
+                    rewards[idx] += facing_reward
+                    breakdown['reward_facing'] = facing_reward
+
+            elif self.task_type == "task2":
+                # 击杀长机奖励（假设 id == 0 为长机）
+                for enemy in enemies:
+                    if not enemy.alive and enemy.id == 0:
+                        rewards[idx] += 3.0
+                        breakdown['reward_kill'] += 3.0
+
+                # 队形协作奖励（鼓励接近队友）
+                allies = [d for d in self.drones if d.teamcode == drone.teamcode and d.id != drone.id and d.alive]
+                if allies:
+                    avg_dist = sum(math.hypot(a.x - drone.x, a.y - drone.y) for a in allies) / len(allies)
+                    cohesion = 0.05 * (1 - min(avg_dist / 500, 1.0))
+                    rewards[idx] += cohesion
+                    breakdown['reward_team_cohesion'] = cohesion
+
+            elif self.task_type == "task3":
+                # 控制靠近敌人奖励（鼓励主动接敌）
+                if enemies:
+                    nearest = min(enemies, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
+                    dist = math.hypot(nearest.x - drone.x, nearest.y - drone.y)
+                    dist_reward = 0.1 * (1 - min(dist / 300, 1.0))
+                    rewards[idx] += dist_reward
+                    breakdown['reward_distance'] = dist_reward
+
+            # ===== 通用发射奖励 =====
+            if drone.fire_cooltime <= 0 and action[2] > 0:
+                rewards[idx] += 0.5
+                breakdown['reward_fire'] = 0.5
+
+            # ===== 通用边界惩罚 =====
+            if drone.x < 50 or drone.x > MAP_SIZE_0 - 50 or drone.y < 50 or drone.y > MAP_SIZE_1 - 50:
+                rewards[idx] -= 0.2
+                breakdown['reward_border'] = -0.2
+
+            breakdown['total'] = rewards[idx]
+            self.reward_breakdown_log.append(breakdown)
+
+            if self.debug:
+                print(f"[Drone {idx}] Reward breakdown:", breakdown)
+
+            self.last_positions[drone.id] = (drone.x, drone.y)
+
+        return rewards
+
+    def get_reward_log(self):
+        return self.reward_breakdown_log

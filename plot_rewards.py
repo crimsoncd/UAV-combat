@@ -4,7 +4,7 @@ from collections import defaultdict
 import pandas as pd
 
 # 读取 jsonl 文件
-log_path = r"uniform\17_Rewards_save_sample\reward_part_4.jsonl"
+log_path = r"uniform\18_curr_test\reward_part_3.jsonl"
 
 # 加载所有记录
 data = []
@@ -28,7 +28,7 @@ for entry in data:
 df = pd.DataFrame(reward_records)
 
 # 选择一个 epoch 和一个智能体 ID 进行可视化
-selected_epoch = 400
+selected_epoch = 300
 selected_id = 0
 df_filtered = df[(df["epoch"] == selected_epoch) & (df["id"] == selected_id)]
 

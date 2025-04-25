@@ -287,9 +287,9 @@ class BattleEnv:
 
         return env_utils.control_strategy_C(drone, target_e.x, target_e.y)
 
-    def step(self, actions, return_half_reward=False):
+    def step(self, actions, reward_type=None, half_reward=False):
         """执行动作"""
-        rewards = np.zeros(self.total_agents)
+        #  rewards = np.zeros(self.total_agents)
         
         # 处理无人机移动和发射
         for idx, drone in enumerate(self.drones):
@@ -333,24 +333,31 @@ class BattleEnv:
 
                     missile._collide()
                     
-                    # 更新奖励
-                    rewards[missile.id] += 50  # 攻击者奖励
-                    rewards[drone.id] -= 50           # 被攻击者惩罚
-                    drone.alive = False
-                    break
-                else:
-                    rewards[missile.id] += 1
+                #     # 更新奖励
+                #     rewards[missile.id] += 50  # 攻击者奖励
+                #     rewards[drone.id] -= 50           # 被攻击者惩罚
+                #     drone.alive = False
+                #     break
+                # else:
+                #     rewards[missile.id] += 1
 
 
-        DronesReward = env_utils.DroneRewardSecond(self.drones, actions)
-        drones_rewards = DronesReward.update_and_return()
-        # rewards = np.add(rewards, drones_rewards)
-        rewards = drones_rewards
+        # DronesReward = env_utils.DroneRewardSecond(self.drones, actions)
+        # drones_rewards = DronesReward.update_and_return()
+        # # rewards = np.add(rewards, drones_rewards)
+        # rewards = drones_rewards
+
+        if reward_type==None or reward_type=="half":
+            TypeReward = env_utils.DroneRewardSecond(self.drones, actions)
+        elif 'task' in reward_type:
+            TypeReward = env_utils.CurriculumReward(self.drones, actions, reward_type)
+
+        rewards = TypeReward.update_and_return()
 
         # 保存记录
         if self.auto_record:
             self._record_frame()
-            self._record_reward(DronesReward.get_reward_log())
+            self._record_reward(TypeReward.get_reward_log())
             self.frame_idx += 1
 
         # 检查终止条件
@@ -359,12 +366,12 @@ class BattleEnv:
         
         obs_n = self._get_obs_all()
         
-        if return_half_reward:
+        if half_reward:
             rewards = rewards[:self.total_agents//2]
-            drones_rewards = drones_rewards[:self.total_agents//2]
+            # drones_rewards = drones_rewards[:self.total_agents//2]
             # obs_n = obs_n[:self.total_agents//2]
         
-        return obs_n, drones_rewards, done, {}
+        return obs_n, rewards, done, {}
     
 
 

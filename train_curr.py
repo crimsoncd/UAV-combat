@@ -11,9 +11,9 @@ from pathlib import Path
 from collections import deque
 import time
 import json
+import matplotlib.pyplot as plt
 from env import BattleEnv
 
-# ============ 网络结构定义 ============
 class SharedActor(nn.Module):
     def __init__(self, obs_dim, action_dim, hidden_dim=128):
         super(SharedActor, self).__init__()
@@ -53,7 +53,6 @@ class Critic(nn.Module):
     def forward(self, obs_all, acts_all):
         return self.net(torch.cat([obs_all, acts_all], dim=-1))
 
-# ============ Replay Buffer ============
 class ReplayBuffer:
     def __init__(self, capacity=100000):
         self.buffer = deque(maxlen=capacity)
@@ -68,7 +67,6 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# ============ 奖励函数（示意） ============
 def simple_reward_scheme(env, task_type="task1"):
     rewards = np.zeros(env.total_agents)
     for i, drone in enumerate(env.drones):
@@ -82,11 +80,12 @@ def simple_reward_scheme(env, task_type="task1"):
                     rewards[i] += 1
     return rewards
 
-# ============ 主训练函数 ============
 def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    num_agents = env.red_num
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
+
+    num_agents = env.red_agents
     obs_dim = len(env._get_obs(0))
     global_obs_dim = obs_dim * num_agents
     action_dim = 3
@@ -102,33 +101,43 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
     critic_opt = optim.Adam(critic.parameters(), lr=critic_lr)
 
     buffer = ReplayBuffer()
-
     noise_scale = 0.4
     noise_decay = 0.995
 
-    save_dir = Path("curriculum_logs") / task_code
+    save_dir = Path("uniform") / task_code
     save_dir.mkdir(exist_ok=True, parents=True)
+
+    reward_history = []
+    actor_loss_history = []
+    critic_loss_history = []
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
 
     current_task = "task1"
     switch_episode = 1000
 
     for ep in range(episodes):
+        ep_start_time = time.time()
         env.reset()
+
+        if ep>switch_episode:
+            current_task = "task2"
+
         obs_n = env._get_obs_all()[:num_agents]
         episode_reward = 0
+        a_loss_episode, c_loss_episode = 0, 0
 
         for step in range(200):
             obs_tensor = torch.FloatTensor(np.array(obs_n)).to(device)
             actions, _ = actor.sample_action(obs_tensor)
             actions = actions.cpu().detach().numpy()
 
-            # 蓝方动作为随机
-            for _ in range(env.blue_num):
+            for _ in range(env.blue_agents):
                 actions = np.vstack([actions, np.random.uniform(-1, 1, size=action_dim)])
 
-            next_obs_n, _, done, _ = env.step(actions)
+            next_obs_n, rewards, done, _ = env.step(actions, reward_type=current_task, half_reward=True)
             next_obs_n = next_obs_n[:num_agents]
-            rewards = simple_reward_scheme(env, current_task)[:num_agents]
+            # rewards = simple_reward_scheme(env, current_task)[:num_agents]
 
             buffer.add(obs_n, actions[:num_agents], rewards, next_obs_n, float(done))
             episode_reward += np.mean(rewards)
@@ -160,23 +169,57 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
             actor_loss.backward()
             actor_opt.step()
 
-            # Soft update
             for tp, p in zip(target_actor.parameters(), actor.parameters()):
                 tp.data.copy_(0.01 * p.data + 0.99 * tp.data)
             for tp, p in zip(target_critic.parameters(), critic.parameters()):
                 tp.data.copy_(0.01 * p.data + 0.99 * tp.data)
 
-        print(f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}")
+            actor_loss_history.append(actor_loss.item())
+            critic_loss_history.append(critic_loss.item())
 
-        if ep == switch_episode:
-            current_task = "task2"
+            a_loss_episode = actor_loss.item()
+            c_loss_episode = critic_loss.item()
 
+        ep_end_time = time.time()
+        reward_history.append(episode_reward)
+        log_text = f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}, a_loss: {a_loss_episode:.2f}, c_loss:{c_loss_episode:.2f} Time: {ep_end_time - ep_start_time:.2f}"
+        print(log_text)
+        with open(save_dir / "log.txt", "a") as f:
+            f.write(log_text + "\n")
+
+        env.save_and_clear(ep, save_dir / f"record_part_{ep//100}.jsonl")
+        env.save_and_clear_rewards(ep, save_dir / f"reward_part_{ep//100}.jsonl")
+
+        ax1.clear()
+        ax1.plot(reward_history, label='Reward', color='blue')
+        ax1.set_title(f'Episode {ep+1} - Avg Reward: {episode_reward:.2f}')
+        ax1.legend()
+
+        ax2.clear()
+        ax2.plot(actor_loss_history, label='Actor Loss', color='red')
+        ax2.set_title('Actor Loss')
+        ax2.legend()
+
+        ax3.clear()
+        ax3.plot(critic_loss_history, label='Critic Loss', color='green')
+        ax3.set_title('Critic Loss')
+        ax3.legend()
+
+        plt.tight_layout()
         if ep % 100 == 0:
             torch.save(actor.state_dict(), save_dir / f"actor_ep{ep}.pth")
             torch.save(critic.state_dict(), save_dir / f"critic_ep{ep}.pth")
+            plt.savefig(save_dir / f"figure_ep{ep}.png")
 
     return actor
 
+
+
 if __name__ == "__main__":
-    env = BattleEnv(red_agents=3, blue_agents=3)
-    train_curriculum(env)
+
+    # task_series = "F_commu"7
+    task_code = "19_Curr"
+
+    env = BattleEnv(red_agents=3, blue_agents=3, auto_record=True)
+    rewards = train_curriculum(env, episodes=3000, is_render=False, task_code=task_code)
+
