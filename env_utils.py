@@ -10,7 +10,8 @@ MAX_ANGLE_ACCE = np.pi / 32
 MAP_SIZE_0 = 750
 MAP_SIZE_1 = 750
 
-FIRE_RANGE = 50
+FIRE_RANGE = 100
+RADIUS = 200
 
 
 # Small utils
@@ -162,11 +163,39 @@ def control_strategy_Expert(drone, all_drones):
     K_acc = 0.05
     SAFE_MARGIN = 50
 
-    enemies = [d for d in all_drones if d.teamcode != drone.teamcode and d.alive]
-    allies = [d for d in all_drones if d.teamcode == drone.teamcode and d.id != drone.id and d.alive]
+    enemies = [d for d in all_drones if d.teamcode != drone.teamcode and d.alive
+               and (d.x - drone.x)**2 + (d.y - drone.y)**2 <= RADIUS**2]
+    # allies = [d for d in all_drones if d.teamcode == drone.teamcode and d.id != drone.id and d.alive]
 
     if not enemies:
-        return 0, 0, -1
+        # ===== 巡逻模式（无敌机可见时） =====
+        center_x, center_y = MAP_SIZE_0 / 2, MAP_SIZE_1 / 2
+        dx, dy = center_x - drone.x, center_y - drone.y
+        distance_center = np.hypot(dx, dy)
+
+        # 简单巡逻逻辑：围绕中心点转圈
+        patrol_radius = 200
+        target_angle = math.atan2(dy, dx) + math.pi/2  # 在中心点逆时针巡逻
+
+        # 防止飞出地图：边缘修正
+        if drone.x < SAFE_MARGIN or drone.x > MAP_SIZE_0 - SAFE_MARGIN or \
+           drone.y < SAFE_MARGIN or drone.y > MAP_SIZE_1 - SAFE_MARGIN:
+            target_angle = math.atan2(center_y - drone.y, center_x - drone.x)
+
+        current_angle = drone.orientation
+        angle_diff = ((target_angle - current_angle + np.pi) % (2 * np.pi)) - np.pi
+
+        # 角加速度调整
+        target_w = K_phi * angle_diff
+        phi = np.clip(target_w - K_brake * drone.w, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+
+        # 加速度控制：适度巡航
+        if abs(angle_diff) < np.pi/8:
+            a = K_acc * 1.0
+        else:
+            a = 0
+
+        return a, phi, -1  # 不开火
 
     # 优先选择最近的敌人 or 距离长机最近者（可扩展）
     nearest = min(enemies, key=lambda e: (e.x - drone.x)**2 + (e.y - drone.y)**2)
