@@ -284,12 +284,8 @@ class BattleEnv:
     def induce_step(self, idx):
 
         drone = self.drones[idx]
-        
-        # Target aim
-        enemies = [d for d in self.drones if d.teamcode!=self.drones[idx].teamcode]
-        target_e = min(enemies, key=lambda e: (e.x-drone.x)**2 + (e.y-drone.y)**2)
+        return env_utils.control_strategy_Expert(drone, self.drones)
 
-        return env_utils.control_strategy_C(drone, target_e.x, target_e.y)
 
     def step(self, actions, reward_type=None, half_reward=False):
         """执行动作"""
