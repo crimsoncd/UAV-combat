@@ -34,7 +34,7 @@ class Drone:
         # 状态量: x, y, alpha, v, w
         self.x = x
         self.y = y
-        self.orientation = 0 if self.teamcode==0 else 3.14
+        self.orientation = float(0) if self.teamcode==0 else float(np.pi)
         self.v = 0
         self.w = 0
 
@@ -52,6 +52,7 @@ class Drone:
 
         # alpha' = alpha + w * t
         self.orientation += self.w
+        self.orientation = float(self.orientation % (2*np.pi))
 
         # Change in position
         self.x += self.v * np.cos(self.orientation)
@@ -208,6 +209,9 @@ class BattleEnv:
             obs.append(self._get_obs(i))
         return obs
     
+    def _get_all_drones(self):
+        return self.drones
+    
     def _get_random_drone(self, team=0):
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
         return target_drone
@@ -308,7 +312,7 @@ class BattleEnv:
 
             # 检查碰撞
             for other_idx, other_drone in enumerate(self.drones):
-                if idx!=other_idx and abs(drone.x-other_drone.x)<3 and abs(drone.y-other_drone.y)<3:
+                if idx!=other_idx and abs(drone.x-other_drone.x)<10 and abs(drone.y-other_drone.y)<10:
                     drone.alive = False
                     other_drone.alive = False
             
@@ -336,7 +340,7 @@ class BattleEnv:
                 #     # 更新奖励
                 #     rewards[missile.id] += 50  # 攻击者奖励
                 #     rewards[drone.id] -= 50           # 被攻击者惩罚
-                #     drone.alive = False
+                    drone.alive = False
                 #     break
                 # else:
                 #     rewards[missile.id] += 1
@@ -399,7 +403,8 @@ class BattleEnv:
             # rotation = np.arctan2(-drone.vy, drone.vx)
             rotation = drone.orientation
             to_draw = self.drone_img if drone.team=="red" else self.drone_img_a
-            rotated_img = pygame.transform.rotate(to_draw, rotation*180/np.pi - 90)  # 转换为顺时针旋转
+            # rotated_img = pygame.transform.rotate(to_draw, rotation*180/np.pi + 90)  # 转换为顺时针旋转
+            rotated_img = pygame.transform.rotate(to_draw, -rotation*180/np.pi -90)
             rect = rotated_img.get_rect(center=(drone.x, drone.y))
             self.screen.blit(rotated_img, rect)
             # pygame.draw.circle(self.screen, color, (drone.x, drone.y), rect.width//2 + 5, 2 ) # 线宽)
@@ -422,6 +427,9 @@ class BattleEnv:
 
 # 测试代码
 if __name__ == "__main__":
+
+    import time
+
     env = BattleEnv(red_agents=1, blue_agents=1, auto_record=False)
     state = env.reset()
 
@@ -436,11 +444,13 @@ if __name__ == "__main__":
         actions.append([0, 0, 0])
 
         # 一个飞机使用策略
+        all_drones = env._get_all_drones()
         self_drone = env._get_random_drone(1)
         target_x, target_y = env._get_random_drone_position(0)
         # actions.append(env_utils.control_strategy(self_drone, target_x, target_y))
         # actions.append(env_utils.control_to_attack(self_drone, target_x, target_y))
-        actions.append(env_utils.control_strategy_C(self_drone, target_x, target_y))
+        # actions.append(env_utils.control_strategy_C(self_drone, target_x, target_y))
+        actions.append(env_utils.control_strategy_Expert(self_drone, all_drones))
         
         # print("actions:", actions)
         

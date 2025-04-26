@@ -152,6 +152,63 @@ def control_strategy_C(drone, enemy_x, enemy_y):
     return a, phi, fire
 
 
+def control_strategy_Expert(drone, all_drones):
+    """
+    专家策略：带有协同目标识别 + 距离控制 + 回避边界 + 稳态机制的行为逻辑
+    """
+    # 参数配置
+    K_phi = 0.2
+    K_brake = 0.9
+    K_acc = 0.05
+    SAFE_MARGIN = 50
+
+    enemies = [d for d in all_drones if d.teamcode != drone.teamcode and d.alive]
+    allies = [d for d in all_drones if d.teamcode == drone.teamcode and d.id != drone.id and d.alive]
+
+    if not enemies:
+        return 0, 0, -1
+
+    # 优先选择最近的敌人 or 距离长机最近者（可扩展）
+    nearest = min(enemies, key=lambda e: (e.x - drone.x)**2 + (e.y - drone.y)**2)
+    dx, dy = nearest.x - drone.x, nearest.y - drone.y
+    distance = np.hypot(dx, dy)
+    target_angle = math.atan2(dy, dx)
+    current_angle = drone.orientation
+    angle_diff = ((target_angle - current_angle + np.pi) % (2 * np.pi)) - np.pi
+
+    # ========== 动作策略控制 ==========
+
+    # 控制角加速度（朝向敌人）
+    target_w = K_phi * angle_diff
+    phi = np.clip(target_w - K_brake * drone.w, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+
+    # 控制加速度：
+    # 1. 对准敌人才推进
+    # 2. 如果太靠近敌人则减速
+    if abs(angle_diff) < np.pi / 6:
+        if distance < 30:
+            a = -MAX_ACCELERATE * 0.3  # 太近减速
+        else:
+            a = min(K_acc * (distance / 50), MAX_ACCELERATE)
+    else:
+        a = 0
+
+    # 控制边界回避行为
+    if drone.x < SAFE_MARGIN or drone.x > MAP_SIZE_0 - SAFE_MARGIN or \
+       drone.y < SAFE_MARGIN or drone.y > MAP_SIZE_1 - SAFE_MARGIN:
+        target_angle = math.atan2(MAP_SIZE_1 / 2 - drone.y, MAP_SIZE_0 / 2 - drone.x)
+        angle_diff = ((target_angle - drone.orientation + np.pi) % (2 * np.pi)) - np.pi
+        phi = np.clip(K_phi * angle_diff - K_brake * drone.w, -MAX_ANGLE_ACCE, MAX_ANGLE_ACCE)
+        a = MAX_ACCELERATE * 0.2
+
+    # 发射控制：靠近+对准
+    fire = 1 if distance < FIRE_RANGE and abs(angle_diff) < np.pi / 12 and drone.fire_cooltime <= 0 else -1
+
+    return a, phi, fire
+
+
+
+
 
 
 
