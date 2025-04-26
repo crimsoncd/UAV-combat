@@ -260,7 +260,6 @@ class BattleEnv:
             "frame_index": self.frame_idx,
             "rewards": reward_breakdown_list
         }
-        # print(frame)
         self.reward_records.append(frame)
 
     def save_and_clear_rewards(self, epoch_num, record_path):
@@ -348,7 +347,7 @@ class BattleEnv:
         # rewards = drones_rewards
 
         if reward_type==None or reward_type=="half":
-            TypeReward = env_utils.DroneRewardSecond(self.drones, actions)
+            TypeReward = env_utils.CurriculumReward(self.drones, actions, "task2")
         elif 'task' in reward_type:
             TypeReward = env_utils.CurriculumReward(self.drones, actions, reward_type)
 
