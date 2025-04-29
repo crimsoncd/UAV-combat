@@ -191,7 +191,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
             f.write(log_text + "\n")
 
         env.save_and_clear(ep, save_dir / f"record_part_{ep//100}.jsonl")
-        env.save_and_clear_rewards(ep, save_dir / f"reward_part_{ep//100}.jsonl")
+        env.save_and_clear_rewards(ep, save_dir / f"reward_part_{ep//100}.csv")
 
         ax1.clear()
         ax1.plot(reward_history, label='Reward', color='blue')
@@ -221,7 +221,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "20__Single_test"
+    task_code = "20__Single_test_b"
 
     env = BattleEnv(red_agents=3, blue_agents=3, auto_record=True)
     rewards = train_curriculum(env, episodes=3000, is_render=True, task_code=task_code)

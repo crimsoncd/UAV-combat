@@ -6,9 +6,10 @@ import math
 
 from copy import deepcopy
 import json
-# from env_utils import DroneReward, rewind, nearest_direction
-# from env_utils import DroneRewardSecond
 import env_utils
+
+import os
+import csv
 
 
 MAX_SPEED = 8
@@ -255,22 +256,28 @@ class BattleEnv:
         self.records = []
 
     def _record_reward(self, reward_breakdown_list):
-        frame = {
-            "battle_index": self.battle_idx,
-            "frame_index": self.frame_idx,
-            "rewards": reward_breakdown_list
-        }
-        self.reward_records.append(frame)
+        for breakdown in reward_breakdown_list:
+            frame = {
+                "battle_index": self.battle_idx,
+                "frame_index": self.frame_idx
+            }
+            frame.update(breakdown)
+            self.reward_records.append(frame)
 
     def save_and_clear_rewards(self, epoch_num, record_path):
         if not self.auto_record:
             return
-        epoch_record = {
-            "epoch": epoch_num,
-            "frames": self.reward_records
-        }
-        with open(record_path, 'a') as f:
-            f.write(json.dumps(epoch_record) + '\n')  # 注意换行符
+        file_exists = os.path.isfile(record_path)
+
+        for frame_record in self.reward_records:
+            line_data = {"epoch": epoch_num} | frame_record
+            with open(record_path, mode='a', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=line_data.keys())   
+                if not file_exists:
+                    writer.writeheader()  # 写入表头
+                    file_exists = True   
+                writer.writerow(line_data)  # 写入数据行
+
         self.reward_records = []
 
     def set_frame_data(self, frame_data):
