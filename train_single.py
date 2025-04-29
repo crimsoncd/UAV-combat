@@ -72,7 +72,7 @@ def expert_learn(ep_num):
     else:
         return True if np.random.random()<0.5 else False
 
-def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False):
+def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False):
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
@@ -144,7 +144,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
             obs_n = next_obs_n
 
             if is_render:
-                env.render()
+                env.render(show_trail=dev_render_trail)
 
             if done:
                 break
@@ -185,7 +185,9 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 
         ep_end_time = time.time()
         reward_history.append(episode_reward)
-        log_text = f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}, a_loss: {a_loss_episode:.2f}, c_loss:{c_loss_episode:.2f} Time: {ep_end_time - ep_start_time:.2f}"
+        outcome = env.decide_outcome()
+        log_text = (f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}, a_loss: {a_loss_episode:.2f}, c_loss:{c_loss_episode:.2f}, "
+                   f"Time: {ep_end_time - ep_start_time:.2f}, Outcome: {outcome}")
         print(log_text)
         with open(save_dir / "log.txt", "a") as f:
             f.write(log_text + "\n")
@@ -221,7 +223,12 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "20__Single_test_b"
+    task_code = "21_Dev_tool_test_b"
 
-    env = BattleEnv(red_agents=3, blue_agents=3, auto_record=True)
-    rewards = train_curriculum(env, episodes=3000, is_render=True, task_code=task_code)
+    env = BattleEnv(red_agents=3,
+                    blue_agents=3,
+                    auto_record=True,
+                    developer_tools=True)
+    rewards = train_curriculum(env, episodes=3000, task_code=task_code,
+                               is_render=True,
+                               dev_render_trail=True)

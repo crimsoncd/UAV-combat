@@ -107,7 +107,7 @@ class Missile:
         self._reset()
 
 class BattleEnv:
-    def __init__(self, red_agents=5, blue_agents=5, auto_record=True):
+    def __init__(self, red_agents=5, blue_agents=5, auto_record=True, developer_tools=False):
         # 初始化参数
         self.red_agents = red_agents
         self.blue_agents = blue_agents
@@ -145,6 +145,12 @@ class BattleEnv:
             self.records = []
             self.reward_records = []
 
+        # Developer Tools
+        if developer_tools:
+            self.develop = True
+            self.trail_red = []
+            self.trail_blue = []
+
     def _init_drones(self):
         """初始化无人机位置"""
         for i in range(self.red_agents):
@@ -178,6 +184,9 @@ class BattleEnv:
         for missile in self.missiles:
             missile._reset()
         self.battle_idx = 0
+        if self.develop:
+            self.trail_blue = []
+            self.trail_red = []
         return self._get_state()
 
     def _get_state(self):
@@ -291,6 +300,14 @@ class BattleEnv:
 
         drone = self.drones[idx]
         return env_utils.control_strategy_Expert(drone, self.drones)
+    
+    def decide_outcome(self):
+        red_alive = len([d for d in self.drones if d.teamcode==0 and d.alive==True])
+        blue_alive = len([d for d in self.drones if d.teamcode==1 and d.alive==True])
+        if red_alive == blue_alive:
+            return 'draw'
+        return 'red win' if red_alive > blue_alive else 'blue win'
+        
 
 
     def step(self, actions, reward_type=None, half_reward=False):
@@ -307,6 +324,13 @@ class BattleEnv:
             action_shoot = True if sh>0 else False
 
             drone._update(a * MAX_ACCELERATE, phi * MAX_ANGLE_ACCE)
+
+            # 记录轨迹
+            if self.develop:
+                if drone.teamcode==0:
+                    self.trail_red.append([int(drone.x), int(drone.y)])
+                else:
+                    self.trail_blue.append([int(drone.x), int(drone.y)])
             
             # 出地图边界
             if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
@@ -339,19 +363,8 @@ class BattleEnv:
 
                     missile._collide()
                     
-                #     # 更新奖励
-                #     rewards[missile.id] += 50  # 攻击者奖励
-                #     rewards[drone.id] -= 50           # 被攻击者惩罚
                     drone.alive = False
-                #     break
-                # else:
-                #     rewards[missile.id] += 1
 
-
-        # DronesReward = env_utils.DroneRewardSecond(self.drones, actions)
-        # drones_rewards = DronesReward.update_and_return()
-        # # rewards = np.add(rewards, drones_rewards)
-        # rewards = drones_rewards
 
         if reward_type==None or reward_type=="half":
             TypeReward = env_utils.CurriculumReward(self.drones, actions, "task2")
@@ -381,7 +394,7 @@ class BattleEnv:
     
 
 
-    def render(self):
+    def render(self, show_trail=False):
         """可视化"""
         if self.screen is None:
             pygame.init()
@@ -411,6 +424,13 @@ class BattleEnv:
             self.screen.blit(rotated_img, rect)
             # pygame.draw.circle(self.screen, color, (drone.x, drone.y), rect.width//2 + 5, 2 ) # 线宽)
             pygame.draw.circle(self.screen, color, (int(drone.x), int(drone.y)), 200, width=1)
+
+        # 绘制轨迹
+        if self.develop and show_trail:
+            for footstep in self.trail_red:
+                pygame.draw.circle(self.screen, (255, 150, 0), footstep, 1)
+            for footstep in self.trail_blue:
+                pygame.draw.circle(self.screen, (0, 255, 255), footstep, 1)
             
         # 绘制导弹
         for missile in self.missiles:
