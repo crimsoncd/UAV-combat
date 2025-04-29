@@ -149,6 +149,7 @@ class BattleEnv:
             self.reward_records = []
 
         # Developer Tools
+        self.develop = False
         if developer_tools:
             self.develop = True
             self.trail_red = []
@@ -296,6 +297,11 @@ class BattleEnv:
         for obj in frame_data:
             if obj["type"]=="Drone":
                 self.drones[obj["id"]].__dict__.update(deepcopy(obj["state"]))
+                if self.develop:
+                    if obj["state"]["teamcode"]==0:
+                        self.trail_red.append([int(obj["state"]["x"]), int(obj["state"]["y"])])
+                    elif obj["state"]["teamcode"]==1:
+                        self.trail_blue.append([int(obj["state"]["x"]), int(obj["state"]["y"])])
             elif obj["type"]=="Missile":
                 self.missiles[obj["id"]].__dict__.update(deepcopy(obj["state"]))
     

@@ -14,29 +14,25 @@ import json
 import matplotlib.pyplot as plt
 from env import BattleEnv
 
-# class SharedActor(nn.Module):
-#     def __init__(self, obs_dim, action_dim, hidden_dim=128):
-#         super(SharedActor, self).__init__()
-#         self.net = nn.Sequential(
-#             nn.Linear(obs_dim, hidden_dim),
-#             nn.ReLU(),
-#             nn.Linear(hidden_dim, hidden_dim),
-#             nn.ReLU()
-#         )
-#         self.mu_head = nn.Linear(hidden_dim, action_dim)
-#         self.sigma_head = nn.Linear(hidden_dim, action_dim)
-
-#     def forward(self, obs):
-#         x = self.net(obs)
-#         mu = torch.tanh(self.mu_head(x))
-#         sigma = torch.clamp(self.sigma_head(x), min=-2, max=1)
-#         return mu, sigma
-
-#     def sample_action(self, obs):
-#         mu, sigma = self.forward(obs)
-#         dist = torch.distributions.Normal(mu, sigma.exp())
-#         action = dist.sample()
-#         return torch.clamp(action, -1.0, 1.0)
+class OUNoise:
+    def __init__(self, action_dim, mu=0, theta=0.15, sigma=0.2):
+        self.action_dim = action_dim
+        self.mu = mu
+        self.theta = theta
+        self.sigma = sigma
+        self.state = np.ones(self.action_dim) * self.mu
+        self.reset()
+    
+    def reset(self):
+        """重置噪声状态"""
+        self.state = np.ones(self.action_dim) * self.mu
+    
+    def sample(self):
+        """生成噪声样本"""
+        dx = self.theta * (self.mu - self.state) 
+        dx += self.sigma * np.random.randn(self.action_dim)
+        self.state += dx
+        return self.state
 
 class SharedActor(nn.Module):
     def __init__(self, obs_dim, action_dim, hidden_size=256):
@@ -45,6 +41,7 @@ class SharedActor(nn.Module):
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, hidden_size)
         self.fc4 = nn.Linear(hidden_size, action_dim)
+        # self.ou_noise = OUNoise(action_dim)  # 添加OU噪声
         self.init_weights()
     
     def init_weights(self):
@@ -66,11 +63,11 @@ class SharedActor(nn.Module):
         return action
     
     def sample_action(self, x, noise=0):
-        if noise > 0:
-            out = self.forward(x)
-            noise_add = torch.randn_like(out) * noise
-            out = torch.clamp(out + noise_add, -1, 1)
-            return out
+        # if noise > 0:
+        #     out = self.forward(x)
+        #     noise_add = self.ou_noise.sample()
+        #     out = torch.clamp(out + noise_add, -1, 1)
+        #     return out
         return self.forward(x)
 
 class Critic(nn.Module):
@@ -103,13 +100,11 @@ class ReplayBuffer:
         return len(self.buffer)
 
 def expert_learn(ep_num):
-    # if ep_num < 1000:
-    #     return True
-    # else:
-    #     return True if np.random.random()<0.5 else False
-    return False
+    use_induce_prob = min(1, ep_num/1000)
+    return np.random.random() < use_induce_prob
 
-def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False):
+def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_decay=0.99,
+                     episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False):
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
@@ -130,8 +125,9 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
     critic_opt = optim.Adam(critic.parameters(), lr=critic_lr)
 
     buffer = ReplayBuffer()
-    noise_scale = 0.6
-    noise_decay = 0.9995
+    noise_scale = noise_scale
+    noise_decay = noise_decay
+    ou_noise = OUNoise(action_dim, sigma=noise_scale)
 
     save_dir = Path("uniform") / task_code
     save_dir.mkdir(exist_ok=True, parents=True)
@@ -149,11 +145,12 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
     fig, axs = plt.subplots(2, 2, figsize=(10, 4))
     ax1, ax2, ax3, ax4 = axs[0,0], axs[0,1], axs[1,0], axs[1,1]
 
-    current_task = "half"
+    current_task = "task1"
 
-    for ep in range(episodes):
+    for ep in range(episodes + 1):
         ep_start_time = time.time()
         env.reset()
+        ou_noise.reset()
 
         obs_n = env._get_obs_all()[:num_agents]
         episode_reward = 0
@@ -173,7 +170,10 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
                     actions.append(env.induce_step(r))
                 else:
                     obs_tensor = torch.FloatTensor(np.array(obs_n[r])).to(device)
-                    actions.append(actor.sample_action(obs_tensor, noise=noise_scale).cpu().detach().numpy())
+                    action = actor.sample_action(obs_tensor, noise=noise_scale).cpu().detach().numpy()
+                    noise = ou_noise.sample()
+                    action = np.clip(action + noise, -1, 1)
+                    actions.append(action)
 
             for b in range(env.blue_agents):
                 # actions = np.vstack([actions, np.random.uniform(-1, 1, size=action_dim)])
@@ -245,7 +245,9 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
         red_win_rate.append(red_win_ep / (ep+1))
         blue_win_rate.append(blue_win_ep / (ep+1))
 
-        noise_scale *= noise_decay
+        # noise_scale *= noise_decay
+        if ep%10==0:
+            noise_scale *= noise_decay
 
         log_text = (f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}, a_loss: {a_loss_episode:.2f}, c_loss:{c_loss_episode:.2f}, "
                    f"Noise: {noise_scale:.2f}, Time: {ep_end_time - ep_start_time:.2f}, Outcome: {outcome}")
@@ -280,8 +282,8 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 
         plt.tight_layout()
         if ep % 100 == 0:
-            torch.save(actor.state_dict(), save_dir / f"actor_ep{ep}.pth")
-            torch.save(critic.state_dict(), save_dir / f"critic_ep{ep}.pth")
+            # torch.save(actor.state_dict(), save_dir / f"actor_ep{ep}.pth")
+            # torch.save(critic.state_dict(), save_dir / f"critic_ep{ep}.pth")
             plt.savefig(save_dir / f"figure_ep{ep}.png")
 
     return actor
@@ -291,7 +293,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "22_Pure_MADDPG_AZ"
+    task_code = "23_Mix_Expert_MADDPG_AZ_c"
 
     env = BattleEnv(red_agents=3,
                     blue_agents=3,
@@ -299,6 +301,10 @@ if __name__ == "__main__":
                     developer_tools=True,
                     margin_crash=False,
                     collision_crash=False)
-    rewards = train_curriculum(env, episodes=3000, task_code=task_code,
+    rewards = train_curriculum(env,
+                               episodes=3000,
+                               noise_scale=0,
+                               noise_decay=0.99,
+                               task_code=task_code,
                                is_render=False,
                                dev_render_trail=True)

@@ -23,15 +23,16 @@ def film_play(record_file, play_epoch=[], play_speed=10):
         elif obj['type']=='Drone' and obj['state']["team"]=="blue":
             blue_num += 1
 
-    env = BattleEnv(red_agents=red_num, blue_agents=blue_num, auto_record=False)
+    env = BattleEnv(red_agents=red_num, blue_agents=blue_num, auto_record=False, developer_tools=True)
     for epoch_data in play_data:
+        env.reset()
         for frame_data in epoch_data:
             env.set_frame_data(frame_data['objects'])
-            env.render()
+            env.render(show_trail=True)
             time.sleep(play_interval)
 
 
 if __name__=="__main__":
 
-    play_file = r"uniform\12_Revised_2nd_CTDE_cuda\record_part_15.jsonl"
-    film_play(play_file, play_epoch=[], play_speed=5)
+    play_file = r"uniform\23_Mix_Expert_MADDPG_AZ_c\record_part_28.jsonl"
+    film_play(play_file, play_epoch=[], play_speed=10)
