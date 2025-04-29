@@ -107,7 +107,8 @@ class Missile:
         self._reset()
 
 class BattleEnv:
-    def __init__(self, red_agents=5, blue_agents=5, auto_record=True, developer_tools=False):
+    def __init__(self, red_agents=5, blue_agents=5, auto_record=True, developer_tools=False,
+                 margin_crash=True, collision_crash=True):
         # 初始化参数
         self.red_agents = red_agents
         self.blue_agents = blue_agents
@@ -119,6 +120,8 @@ class BattleEnv:
         self.fire_cooldown = 30
         self.missile_ttl = 30
         self.attack_radius = 15
+        self.margin_crash = margin_crash
+        self.collision_crash = collision_crash
         
         # 初始化无人机
         self.drones = []
@@ -333,14 +336,16 @@ class BattleEnv:
                     self.trail_blue.append([int(drone.x), int(drone.y)])
             
             # 出地图边界
-            # if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
-            #     drone.alive = False
+            if self.margin_crash:
+                if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
+                    drone.alive = False
 
             # 检查碰撞
-            for other_idx, other_drone in enumerate(self.drones):
-                if idx!=other_idx and abs(drone.x-other_drone.x)<10 and abs(drone.y-other_drone.y)<10:
-                    drone.alive = False
-                    other_drone.alive = False
+            if self.collision_crash:
+                for other_idx, other_drone in enumerate(self.drones):
+                    if idx!=other_idx and abs(drone.x-other_drone.x)<10 and abs(drone.y-other_drone.y)<10:
+                        drone.alive = False
+                        other_drone.alive = False
             
             # 处理发射
             if action_shoot and drone.fire_cooltime <= 0:

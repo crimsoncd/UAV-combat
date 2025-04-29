@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import random
@@ -13,29 +14,64 @@ import json
 import matplotlib.pyplot as plt
 from env import BattleEnv
 
+# class SharedActor(nn.Module):
+#     def __init__(self, obs_dim, action_dim, hidden_dim=128):
+#         super(SharedActor, self).__init__()
+#         self.net = nn.Sequential(
+#             nn.Linear(obs_dim, hidden_dim),
+#             nn.ReLU(),
+#             nn.Linear(hidden_dim, hidden_dim),
+#             nn.ReLU()
+#         )
+#         self.mu_head = nn.Linear(hidden_dim, action_dim)
+#         self.sigma_head = nn.Linear(hidden_dim, action_dim)
+
+#     def forward(self, obs):
+#         x = self.net(obs)
+#         mu = torch.tanh(self.mu_head(x))
+#         sigma = torch.clamp(self.sigma_head(x), min=-2, max=1)
+#         return mu, sigma
+
+#     def sample_action(self, obs):
+#         mu, sigma = self.forward(obs)
+#         dist = torch.distributions.Normal(mu, sigma.exp())
+#         action = dist.sample()
+#         return torch.clamp(action, -1.0, 1.0)
+
 class SharedActor(nn.Module):
-    def __init__(self, obs_dim, action_dim, hidden_dim=128):
+    def __init__(self, obs_dim, action_dim, hidden_size=256):
         super(SharedActor, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(obs_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-        self.mu_head = nn.Linear(hidden_dim, action_dim)
-        self.sigma_head = nn.Linear(hidden_dim, action_dim)
+        self.fc1 = nn.Linear(obs_dim, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, action_dim)
+        self.init_weights()
+    
+    def init_weights(self):
+        # 使用Xavier初始化
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.constant_(m.bias, 0.1)
+    
+    def forward(self, x):
 
-    def forward(self, obs):
-        x = self.net(obs)
-        mu = torch.tanh(self.mu_head(x))
-        sigma = torch.clamp(self.sigma_head(x), min=-2, max=1)
-        return mu, sigma
-
-    def sample_action(self, obs):
-        mu, sigma = self.forward(obs)
-        dist = torch.distributions.Normal(mu, sigma.exp())
-        action = dist.sample()
-        return torch.clamp(action, -1.0, 1.0), dist
+        if isinstance(x, np.ndarray):
+            x = torch.FloatTensor(x)
+        
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        action = torch.tanh(self.fc4(x))
+        return action
+    
+    def sample_action(self, x, noise=0):
+        if noise > 0:
+            out = self.forward(x)
+            noise_add = torch.randn_like(out) * noise
+            out = torch.clamp(out + noise_add, -1, 1)
+            return out
+        return self.forward(x)
 
 class Critic(nn.Module):
     def __init__(self, global_obs_dim, action_dim, num_agents, hidden_dim=256):
@@ -67,10 +103,11 @@ class ReplayBuffer:
         return len(self.buffer)
 
 def expert_learn(ep_num):
-    if ep_num < 1000:
-        return True
-    else:
-        return True if np.random.random()<0.5 else False
+    # if ep_num < 1000:
+    #     return True
+    # else:
+    #     return True if np.random.random()<0.5 else False
+    return False
 
 def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False):
 
@@ -93,8 +130,8 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
     critic_opt = optim.Adam(critic.parameters(), lr=critic_lr)
 
     buffer = ReplayBuffer()
-    noise_scale = 0.4
-    noise_decay = 0.995
+    noise_scale = 0.6
+    noise_decay = 0.9995
 
     save_dir = Path("uniform") / task_code
     save_dir.mkdir(exist_ok=True, parents=True)
@@ -136,12 +173,14 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
                     actions.append(env.induce_step(r))
                 else:
                     obs_tensor = torch.FloatTensor(np.array(obs_n[r])).to(device)
-                    actions.append(actor.sample_action(obs_tensor)[0].cpu().detach().numpy())
+                    actions.append(actor.sample_action(obs_tensor, noise=noise_scale).cpu().detach().numpy())
 
             for b in range(env.blue_agents):
                 # actions = np.vstack([actions, np.random.uniform(-1, 1, size=action_dim)])
                 # actions = np.vstack([actions, np.zeros(3)])
                 actions.append([0, 0, 0])
+
+            # print(actions)
 
             next_obs_n, rewards, done, _ = env.step(actions, reward_type=current_task)
             next_obs_n = next_obs_n[:num_agents]
@@ -167,7 +206,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
             act_all = act_b.view(batch_size, -1).to(device)
 
             with torch.no_grad():
-                target_acts, _ = target_actor.sample_action(next_obs_b.to(device))
+                target_acts = target_actor.sample_action(next_obs_b.to(device))
                 target_acts_all = target_acts.view(batch_size, -1)
                 q_target = rew_b.sum(1, keepdim=True).to(device) + 0.95 * target_critic(next_obs_all, target_acts_all)
 
@@ -177,7 +216,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
             critic_loss.backward()
             critic_opt.step()
 
-            new_acts, _ = actor.sample_action(obs_b.to(device))
+            new_acts = actor.sample_action(obs_b.to(device))
             actor_loss = -critic(obs_all, new_acts.view(batch_size, -1)).mean()
             actor_opt.zero_grad()
             actor_loss.backward()
@@ -206,8 +245,10 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
         red_win_rate.append(red_win_ep / (ep+1))
         blue_win_rate.append(blue_win_ep / (ep+1))
 
+        noise_scale *= noise_decay
+
         log_text = (f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}, a_loss: {a_loss_episode:.2f}, c_loss:{c_loss_episode:.2f}, "
-                   f"Time: {ep_end_time - ep_start_time:.2f}, Outcome: {outcome}")
+                   f"Noise: {noise_scale:.2f}, Time: {ep_end_time - ep_start_time:.2f}, Outcome: {outcome}")
         print(log_text)
         with open(save_dir / "log.txt", "a") as f:
             f.write(log_text + "\n")
@@ -250,12 +291,14 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "21_Dev_tool_test_g"
+    task_code = "22_Pure_MADDPG_AZ"
 
     env = BattleEnv(red_agents=3,
                     blue_agents=3,
                     auto_record=True,
-                    developer_tools=True)
+                    developer_tools=True,
+                    margin_crash=False,
+                    collision_crash=False)
     rewards = train_curriculum(env, episodes=3000, task_code=task_code,
                                is_render=False,
                                dev_render_trail=True)
