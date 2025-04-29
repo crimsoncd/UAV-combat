@@ -34,5 +34,5 @@ def film_play(record_file, play_epoch=[], play_speed=10):
 
 if __name__=="__main__":
 
-    play_file = r"uniform\23_Mix_Expert_MADDPG_AZ_c\record_part_28.jsonl"
+    play_file = r"uniform\23_Mix_Expert_MADDPG_AZ_e\record_part_17.jsonl"
     film_play(play_file, play_epoch=[], play_speed=10)

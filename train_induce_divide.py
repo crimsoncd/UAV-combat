@@ -14,6 +14,8 @@ import json
 import matplotlib.pyplot as plt
 from env import BattleEnv
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class OUNoise:
     def __init__(self, action_dim, mu=0, theta=0.15, sigma=0.2):
         self.action_dim = action_dim
@@ -66,31 +68,42 @@ class SharedActor(nn.Module):
         return self.forward(x)
 
 class Critic(nn.Module):
-    def __init__(self, global_obs_dim, action_dim, num_agents, hidden_dim=256):
+    def __init__(self, obs_dim, action_dim, num_agents, hidden_dim=256):
         super(Critic, self).__init__()
-        input_dim = global_obs_dim + action_dim * num_agents
+        input_dim = obs_dim * num_agents + action_dim * num_agents
         self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(input_dim, 256),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            # nn.BatchNorm1d(256),
+            nn.Linear(256, 64),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
+            # nn.BatchNorm1d(64),
+            nn.Linear(64, 1)
         )
-
-    def forward(self, obs_all, acts_all):
-        return self.net(torch.cat([obs_all, acts_all], dim=-1))
+        self.to(device)
+    
+    def forward(self, obss, actions):
+        x = torch.cat([obss, actions], dim=1)
+        return self.net(x).to(device)
 
 class ReplayBuffer:
     def __init__(self, capacity=100000):
         self.buffer = deque(maxlen=capacity)
 
-    def add(self, obs, acts, rewards, next_obs, done):
-        self.buffer.append((obs, acts, rewards, next_obs, done))
+    def add(self, obs, actions, rewards, next_obs, done):
+        self.buffer.append((obs, actions, rewards, next_obs, done))
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        return map(lambda x: torch.tensor(np.array(x), dtype=torch.float32), zip(*batch))
+        obs, actions, rewards, next_obs, dones = zip(*batch)
 
+        obs = torch.FloatTensor(np.array(obs)).to(device)            # [batch, num_agents, obs_dim]
+        actions = torch.FloatTensor(np.array(actions)).to(device)
+        rewards = torch.FloatTensor(np.array(rewards)).to(device)
+        next_obs = torch.FloatTensor(np.array(next_obs)).to(device)
+        dones = torch.FloatTensor(dones).unsqueeze(1).to(device)
+        return obs, actions, rewards, next_obs, dones
+    
     def __len__(self):
         return len(self.buffer)
 
@@ -99,10 +112,10 @@ def expert_learn(ep_num):
     use_induce_prob = max(0, 1-ep_num/1000)
     return np.random.random() < use_induce_prob
 
-def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_decay=0.99,
+def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_decay=0.99, gamma=0.95,
                      episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False):
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     print("Using device:", device)
 
     num_agents = env.red_agents
@@ -110,15 +123,20 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
     global_obs_dim = obs_dim * num_agents
     action_dim = 3
 
-    actor = SharedActor(obs_dim, action_dim).to(device)
-    critic = Critic(global_obs_dim, action_dim, num_agents).to(device)
-    target_actor = SharedActor(obs_dim, action_dim).to(device)
-    target_critic = Critic(global_obs_dim, action_dim, num_agents).to(device)
-    target_actor.load_state_dict(actor.state_dict())
-    target_critic.load_state_dict(critic.state_dict())
-
-    actor_opt = optim.Adam(actor.parameters(), lr=actor_lr)
-    critic_opt = optim.Adam(critic.parameters(), lr=critic_lr)
+    # Initialize networks
+    actors = [SharedActor(obs_dim, action_dim).to(device) for _ in range(num_agents)]
+    critics = [Critic(obs_dim, action_dim, num_agents).to(device) for _ in range(num_agents)]
+    target_actors = [SharedActor(obs_dim, action_dim).to(device) for _ in range(num_agents)]
+    target_critics = [Critic(obs_dim, action_dim, num_agents).to(device) for _ in range(num_agents)]
+    
+    # Sync target networks
+    for i in range(num_agents):
+        target_actors[i].load_state_dict(actors[i].state_dict())
+        target_critics[i].load_state_dict(critics[i].state_dict())
+    
+    # Optimizers
+    actor_optimizers = [optim.Adam(actor.parameters(), lr=actor_lr) for actor in actors]
+    critic_optimizers = [optim.Adam(critic.parameters(), lr=critic_lr) for critic in critics]
 
     buffer = ReplayBuffer()
     noise_scale = noise_scale
@@ -166,7 +184,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
                     actions.append(env.induce_step(r))
                 else:
                     obs_tensor = torch.FloatTensor(np.array(obs_n[r])).to(device)
-                    action = actor.sample_action(obs_tensor, noise=noise_scale).cpu().detach().numpy()
+                    action = actors[r].sample_action(obs_tensor, noise=noise_scale).cpu().detach().numpy()
                     noise = ou_noise.sample()
                     action = np.clip(action + noise, -1, 1)
                     actions.append(action)
@@ -195,33 +213,39 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             if done:
                 break
 
-        if ep > 100 and len(buffer) > batch_size:
-            obs_b, act_b, rew_b, next_obs_b, done_b = buffer.sample(batch_size)
-            obs_all = obs_b.view(batch_size, -1).to(device)
-            next_obs_all = next_obs_b.view(batch_size, -1).to(device)
-            act_all = act_b.view(batch_size, -1).to(device)
+        if ep > 20 and len(buffer) > batch_size:
+            # obs_b, act_b, rew_b, next_obs_b, done_b = buffer.sample(batch_size)
+            # obs_all = obs_b.view(batch_size, -1).to(device)
+            # next_obs_all = next_obs_b.view(batch_size, -1).to(device)
+            # act_all = act_b.view(batch_size, -1).to(device)
+
+            obs_batch, act_batch, rew_batch, next_obs_batch, done_batch = buffer.sample(batch_size)
+
+            all_obs = obs_batch.view(batch_size, -1)
+            all_next_obs = next_obs_batch.view(batch_size, -1)
+            all_actions = act_batch.view(batch_size, -1)
 
             with torch.no_grad():
-                target_acts = target_actor.sample_action(next_obs_b.to(device))
-                target_acts_all = target_acts.view(batch_size, -1)
-                q_target = rew_b.sum(1, keepdim=True).to(device) + 0.95 * target_critic(next_obs_all, target_acts_all)
+                target_acts = [target_actors[j](next_obs_batch[:, j, :]) for j in range(num_agents)]
+                target_acts_cat = torch.cat(target_acts, dim=1).to(device)
+                target_q = target_critics[i](all_next_obs, target_acts_cat)
+                target_q = rew_batch[:, i].unsqueeze(1) + (1 - done_batch) * gamma * target_q
 
-            q_val = critic(obs_all, act_all)
-            critic_loss = nn.MSELoss()(q_val, q_target)
-            critic_opt.zero_grad()
+            curr_q = critics[i](all_obs, all_actions)
+            critic_loss = nn.MSELoss()(curr_q, target_q)
+            critic_optimizers[i].zero_grad()
             critic_loss.backward()
-            critic_opt.step()
+            critic_optimizers[i].step()
 
-            new_acts = actor.sample_action(obs_b.to(device))
-            actor_loss = -critic(obs_all, new_acts.view(batch_size, -1)).mean()
-            actor_opt.zero_grad()
+            curr_acts = [actors[j](obs_batch[:, j, :]).detach() if j != i else actors[j](obs_batch[:, j, :]) for j in range(num_agents)]
+            curr_acts_cat = torch.cat(curr_acts, dim=1).to(device)
+            actor_loss = -critics[i](all_obs, curr_acts_cat).mean()
+            actor_optimizers[i].zero_grad()
             actor_loss.backward()
-            actor_opt.step()
+            actor_optimizers[i].step()
 
-            for tp, p in zip(target_actor.parameters(), actor.parameters()):
-                tp.data.copy_(0.01 * p.data + 0.99 * tp.data)
-            for tp, p in zip(target_critic.parameters(), critic.parameters()):
-                tp.data.copy_(0.01 * p.data + 0.99 * tp.data)
+            # actor_losses.append(actor_loss.item())
+            # critic_losses.append(critic_loss.item())
 
             actor_loss_history.append(actor_loss.item())
             critic_loss_history.append(critic_loss.item())
@@ -282,25 +306,26 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             # torch.save(critic.state_dict(), save_dir / f"critic_ep{ep}.pth")
             plt.savefig(save_dir / f"figure_ep{ep}.png")
 
-    return actor
+    return
 
 
 
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "23_Mix_Expert_MADDPG_AZ_e"
+    task_code = "24_Correct"
 
     env = BattleEnv(red_agents=3,
                     blue_agents=3,
-                    auto_record=True,
+                    auto_record=False,
                     developer_tools=True,
                     margin_crash=False,
                     collision_crash=False)
-    rewards = train_curriculum(env,
-                               episodes=3000,
-                               noise_scale=0,
-                               noise_decay=0.99,
-                               task_code=task_code,
-                               is_render=False,
-                               dev_render_trail=True)
+    
+    train_curriculum(env,
+                     episodes=2000,
+                     noise_scale=0.3,
+                     noise_decay=0.99,
+                     task_code=task_code,
+                     is_render=False,
+                     dev_render_trail=True)
