@@ -333,8 +333,8 @@ class BattleEnv:
                     self.trail_blue.append([int(drone.x), int(drone.y)])
             
             # 出地图边界
-            if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
-                drone.alive = False
+            # if drone.x<0 or drone.x>self.map_size[0] or drone.y<0 or drone.y>self.map_size[1]:
+            #     drone.alive = False
 
             # 检查碰撞
             for other_idx, other_drone in enumerate(self.drones):

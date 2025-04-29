@@ -100,10 +100,17 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
     save_dir.mkdir(exist_ok=True, parents=True)
 
     reward_history = []
+    reward_enemy_history = []
     actor_loss_history = []
     critic_loss_history = []
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 6))
+    red_win_ep = 0
+    blue_win_ep = 0
+    red_win_rate = []
+    blue_win_rate = []
+
+    fig, axs = plt.subplots(2, 2, figsize=(10, 4))
+    ax1, ax2, ax3, ax4 = axs[0,0], axs[0,1], axs[1,0], axs[1,1]
 
     current_task = "half"
 
@@ -113,6 +120,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 
         obs_n = env._get_obs_all()[:num_agents]
         episode_reward = 0
+        episode_reward_enemy = 0
         a_loss_episode, c_loss_episode = 0, 0
 
         for step in range(200):
@@ -135,12 +143,15 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
                 # actions = np.vstack([actions, np.zeros(3)])
                 actions.append([0, 0, 0])
 
-            next_obs_n, rewards, done, _ = env.step(actions, reward_type=current_task, half_reward=True)
+            next_obs_n, rewards, done, _ = env.step(actions, reward_type=current_task)
             next_obs_n = next_obs_n[:num_agents]
+            rewards_enemy = rewards[num_agents:]
+            rewards = rewards[:num_agents]
             # rewards = simple_reward_scheme(env, current_task)[:num_agents]
 
             buffer.add(obs_n, actions[:num_agents], rewards, next_obs_n, float(done))
             episode_reward += np.mean(rewards)
+            episode_reward_enemy += np.mean(rewards_enemy)
             obs_n = next_obs_n
 
             if is_render:
@@ -185,7 +196,16 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 
         ep_end_time = time.time()
         reward_history.append(episode_reward)
+        reward_enemy_history.append(episode_reward_enemy)
+
         outcome = env.decide_outcome()
+        if 'red' in outcome:
+            red_win_ep += 1
+        elif 'blue' in outcome:
+            blue_win_ep += 1
+        red_win_rate.append(red_win_ep / (ep+1))
+        blue_win_rate.append(blue_win_ep / (ep+1))
+
         log_text = (f"[Ep {ep}] Reward: {episode_reward:.2f}, Task: {current_task}, a_loss: {a_loss_episode:.2f}, c_loss:{c_loss_episode:.2f}, "
                    f"Time: {ep_end_time - ep_start_time:.2f}, Outcome: {outcome}")
         print(log_text)
@@ -196,19 +216,26 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
         env.save_and_clear_rewards(ep, save_dir / f"reward_part_{ep//100}.csv")
 
         ax1.clear()
-        ax1.plot(reward_history, label='Reward', color='blue')
-        ax1.set_title(f'Episode {ep+1} - Avg Reward: {episode_reward:.2f}')
+        ax1.plot(reward_history, label='Red Reward', color='red')
+        ax1.plot(reward_enemy_history, label='Blue Reward', color='blue')
+        ax1.set_title("Average Reward")
         ax1.legend()
 
         ax2.clear()
-        ax2.plot(actor_loss_history, label='Actor Loss', color='red')
-        ax2.set_title('Actor Loss')
+        ax2.plot(red_win_rate, label='Red Win Rate', color='red')
+        ax2.plot(blue_win_rate, label='Blue Win Rate', color='blue')
+        ax2.set_title('Win rate')
         ax2.legend()
 
         ax3.clear()
-        ax3.plot(critic_loss_history, label='Critic Loss', color='green')
-        ax3.set_title('Critic Loss')
+        ax3.plot(actor_loss_history, label='Actor Loss', color='red')
+        ax3.set_title('Actor Loss')
         ax3.legend()
+
+        ax4.clear()
+        ax4.plot(critic_loss_history, label='Critic Loss', color='green')
+        ax4.set_title('Critic Loss')
+        ax4.legend()
 
         plt.tight_layout()
         if ep % 100 == 0:
@@ -223,12 +250,12 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, episodes=3000, batch_si
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "21_Dev_tool_test_b"
+    task_code = "21_Dev_tool_test_g"
 
     env = BattleEnv(red_agents=3,
                     blue_agents=3,
                     auto_record=True,
                     developer_tools=True)
     rewards = train_curriculum(env, episodes=3000, task_code=task_code,
-                               is_render=True,
+                               is_render=False,
                                dev_render_trail=True)
