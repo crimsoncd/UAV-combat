@@ -46,7 +46,7 @@ class SharedActor(nn.Module):
         # self.fc5 = nn.Linear(128, action_dim)
         self.simple1 = nn.Linear(obs_dim, 256)
         self.simple2= nn.Linear(256, action_dim)
-        self.simple3 = nn.Linear(action_dim, action_dim)
+        self.simple3 = nn.Linear(256, action_dim)
         # self.ou_noise = OUNoise(action_dim)  # 添加OU噪声
         self.init_weights()
     
@@ -70,10 +70,9 @@ class SharedActor(nn.Module):
         # action = torch.clamp(x, min=-1, max=1)
         x = F.relu(self.simple1(x))
         # x = F.relu(self.simple2(x))
-        # x = self.simple3(x)
-        # action = F.tanh(x)
-        x = self.simple2(x)
+        x = self.simple3(x)
         action = torch.clamp(x, min=-1, max=1)
+        # action = F.tanh(x)
         return action
     
     def sample_action(self, x, noise=0):
@@ -83,6 +82,7 @@ class Critic(nn.Module):
     def __init__(self, obs_dim, action_dim, num_agents, hidden_dim=256):
         super(Critic, self).__init__()
         input_dim = obs_dim * num_agents + action_dim * num_agents
+        self.norm = nn.BatchNorm1d(input_dim)
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
@@ -96,6 +96,7 @@ class Critic(nn.Module):
     
     def forward(self, obss, actions):
         x = torch.cat([obss, actions], dim=1)
+        x = self.norm(x)
         return self.net(x).to(device)
 
 class ReplayBuffer:
@@ -267,6 +268,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             critic_loss = nn.MSELoss()(curr_q, target_q)
             critic_optimizers[i].zero_grad()
             critic_loss.backward()
+            # torch.nn.utils.clip_grad_norm_(critics[i].parameters(), max_norm=0.5)
             critic_optimizers[i].step()
 
             curr_acts = [actors[j](obs_batch[:, j, :]).detach() if j != i else actors[j](obs_batch[:, j, :]) for j in range(num_agents)]
@@ -274,6 +276,7 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             actor_loss = -critics[i](all_obs, curr_acts_cat).mean()
             actor_optimizers[i].zero_grad()
             actor_loss.backward()
+            # torch.nn.utils.clip_grad_norm_(actors[i].parameters(), max_norm=0.5)
             actor_optimizers[i].step()
 
             # actor_losses.append(actor_loss.item())
@@ -327,13 +330,13 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             ax1.clear()
             ax1.plot(reward_enemy_history_peri, label='Blue Reward', color='blue')        
             ax1.plot(reward_history_peri, label='Red Reward', color='red')
-            ax1.set_title("Average Reward")
+            ax1.set_title(f"Average Reward (Outperform: {np.mean(reward_history_peri)-np.mean(reward_enemy_history_peri):.2f})")
             ax1.legend()
 
             ax2.clear()
             ax2.plot(blue_win_rate, label='Blue Win Rate', color='blue')        
             ax2.plot(red_win_rate, label='Red Win Rate', color='red')
-            ax2.set_title('Win rate')
+            ax2.set_title(f'Win rate (Outperform: {np.mean(red_win_rate)-np.mean(blue_win_rate):.2f})')
             ax2.legend()
 
             ax3.clear()
@@ -361,16 +364,18 @@ if __name__ == "__main__":
 
     env = BattleEnv(red_agents=3,
                     blue_agents=3,
-                    auto_record=False,
+                    auto_record=True,
                     developer_tools=False,
                     margin_crash=False,
                     collision_crash=False)
     
     train_curriculum(env,
+                     actor_lr=1e-4,
+                     critic_lr=1e-3,
                      episodes=3000,
                      noise_scale=0.6,
                      noise_decay=0.99,
-                     task_code="30_range_Attack_j", 
+                     task_code="31_Verge_Test_Seeall", 
                      is_render=False,
                      dev_render_trail=True,
                      Mix_Method=None,

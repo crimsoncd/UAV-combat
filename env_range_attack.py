@@ -262,7 +262,8 @@ class BattleEnv:
         # Self
         obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
         # Enemy
-        enemies = self._get_enemy_in_sight(idx)
+        # enemies = self._get_enemy_in_sight(idx)
+        enemies = self._get_enemies(idx)
         if len(enemies) > 0:
             x, y = drone.x, drone.y
             enemies.sort(key=lambda d: (d.x - x)**2 + (d.y - y)**2)
@@ -456,7 +457,7 @@ class BattleEnv:
         #             missile._collide()
         #             drone.alive = False
 
-
+        TypeReward = None
         if reward_type==None or reward_type=="half":
             TypeReward = env_utils.CurriculumReward(self.drones, actions, "task1")
             rewards = TypeReward.update_and_return()
@@ -471,7 +472,8 @@ class BattleEnv:
         # 保存记录
         if self.auto_record:
             self._record_frame()
-            self._record_reward(TypeReward.get_reward_log())
+            if TypeReward:
+                self._record_reward(TypeReward.get_reward_log())
             self.frame_idx += 1
 
         # 检查终止条件
@@ -504,6 +506,8 @@ class BattleEnv:
         # self.screen.fill(self.color_darkbg)
 
         for drone in self.drones:
+            if not drone.alive:
+                continue
             # 绘制无人机扇形
             fan_color = (255, 182, 193) if drone.teamcode==0 else (173, 216, 230)
             draw_fan_sector(self.screen, (drone.x, drone.y), drone.orientation, ATTACK_ALPHA, ATTACK_R, fan_color)
