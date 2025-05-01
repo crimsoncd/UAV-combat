@@ -204,17 +204,29 @@ class BattleEnv:
         return np.array(state, dtype=np.float32)
     
     def _get_obs(self, idx):
+        # obs = []
+        # for drone in self.drones:
+        #     if drone.teamcode == self.drones[idx].teamcode:
+        #         obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
+        #     else:
+        #         if (drone.x-self.drones[idx].x)**2 + (drone.y-self.drones[idx].y)**2 <= 200**2:
+        #             obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
+        #         else:
+        #             obs += [0, 0, 0, 0, 0, 0]
+        # for missile in self.missiles:
+        #     obs += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         obs = []
-        for drone in self.drones:
-            if drone.teamcode == self.drones[idx].teamcode:
-                obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
-            else:
-                if (drone.x-self.drones[idx].x)**2 + (drone.y-self.drones[idx].y)**2 <= 200**2:
-                    obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
-                else:
-                    obs += [0, 0, 0, 0, 0, 0]
-        for missile in self.missiles:
-            obs += [missile.x, missile.y, missile.orientation, int(missile.exist)]
+        drone = self.drones[idx]
+        # Self
+        obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
+        # Enemy
+        enemies = self._get_enemy_in_sight(idx)
+        if len(enemies) > 0:
+            x, y = drone.x, drone.y
+            enemies.sort(key=lambda d: (d.x - x)**2 + (d.y - y)**2)
+            obs += [enemies[0].x, enemies[0].y]
+        else:
+            obs += [0, 0]
         return np.array(obs, dtype=np.float32)
     
     def _get_obs_all(self):
@@ -229,6 +241,10 @@ class BattleEnv:
     def _get_random_drone(self, team=0):
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
         return target_drone
+    
+    def _get_enemy_in_sight(self, idx):
+        drone = self.drones[idx]
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive and (d.x-drone.x)**2+(d.y-drone.y)**2 <= 200**2]
     
     def _get_random_drone_position(self, team=0):
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
@@ -322,6 +338,7 @@ class BattleEnv:
     def step(self, actions, reward_type=None, half_reward=False):
         """执行动作"""
         #  rewards = np.zeros(self.total_agents)
+        shoot_rewards = np.zeros(self.total_agents)
         
         # 处理无人机移动和发射
         for idx, drone in enumerate(self.drones):
@@ -371,18 +388,21 @@ class BattleEnv:
                 if (drone.teamcode != missile.teamcode and 
                     drone.alive and 
                     np.hypot(drone.x-missile.x, drone.y-missile.y) < self.attack_radius):
-
+                    shoot_rewards[missile.id] += 1
                     missile._collide()
-                    
                     drone.alive = False
 
 
         if reward_type==None or reward_type=="half":
-            TypeReward = env_utils.CurriculumReward(self.drones, actions, "task2")
+            TypeReward = env_utils.CurriculumReward(self.drones, actions, "task1")
+            rewards = TypeReward.update_and_return()
         elif 'task' in reward_type:
             TypeReward = env_utils.CurriculumReward(self.drones, actions, reward_type)
+            rewards = TypeReward.update_and_return()
+        elif 'only_shoot' in reward_type:
+            rewards = shoot_rewards
 
-        rewards = TypeReward.update_and_return()
+        # rewards = TypeReward.update_and_return()
 
         # 保存记录
         if self.auto_record:

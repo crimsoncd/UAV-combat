@@ -12,7 +12,7 @@ from collections import deque
 import time
 import json
 import matplotlib.pyplot as plt
-from env import BattleEnv
+from env_range_attack import BattleEnv
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -39,10 +39,14 @@ class OUNoise:
 class SharedActor(nn.Module):
     def __init__(self, obs_dim, action_dim, hidden_size=256):
         super(SharedActor, self).__init__()
-        self.fc1 = nn.Linear(obs_dim, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, hidden_size)
-        self.fc4 = nn.Linear(hidden_size, action_dim)
+        # self.fc1 = nn.Linear(obs_dim, 128)
+        # self.fc2 = nn.Linear(128, 128)
+        # self.fc3 = nn.Linear(128, hidden_size)
+        # self.fc4 = nn.Linear(hidden_size, 128)
+        # self.fc5 = nn.Linear(128, action_dim)
+        self.simple1 = nn.Linear(obs_dim, 256)
+        self.simple2= nn.Linear(256, action_dim)
+        self.simple3 = nn.Linear(action_dim, action_dim)
         # self.ou_noise = OUNoise(action_dim)  # 添加OU噪声
         self.init_weights()
     
@@ -58,10 +62,18 @@ class SharedActor(nn.Module):
         if isinstance(x, np.ndarray):
             x = torch.FloatTensor(x)
         
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        action = torch.tanh(self.fc4(x))
+        # x = F.relu(self.fc1(x))
+        # # x = F.relu(self.fc2(x))
+        # # x = F.relu(self.fc3(x))
+        # # x = F.relu(self.fc4(x))
+        # x = F.relu(self.fc5(x))
+        # action = torch.clamp(x, min=-1, max=1)
+        x = F.relu(self.simple1(x))
+        # x = F.relu(self.simple2(x))
+        # x = self.simple3(x)
+        # action = F.tanh(x)
+        x = self.simple2(x)
+        action = torch.clamp(x, min=-1, max=1)
         return action
     
     def sample_action(self, x, noise=0):
@@ -107,13 +119,24 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-def expert_learn(ep_num):
-    # use_induce_prob = min(1, ep_num/1000)
+def expert_learn_A(ep_num):
     use_induce_prob = max(0, 1-ep_num/1000)
     return np.random.random() < use_induce_prob
 
+def expert_learn_B(ep_num):
+    if ep_num < 1000:
+        use_induce_prob = min(1, ep_num/1000)
+        return np.random.random() < use_induce_prob
+    return False
+
+def expert_learn_C(ep_num):
+    # if ep_num>2000:
+    #     return False
+    return not bool((ep_num//200)%2)
+
 def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_decay=0.99, gamma=0.95,
-                     episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False):
+                     episodes=3000, batch_size=256, task_code="TaskCurr", is_render=False, dev_render_trail=False,
+                     Mix_Method=None, reward_type='task1'):
 
 
     print("Using device:", device)
@@ -143,23 +166,28 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
     noise_decay = noise_decay
     ou_noise = OUNoise(action_dim, sigma=noise_scale)
 
-    save_dir = Path("uniform") / task_code
+    if Mix_Method==None:
+        Mix_Method = lambda *_: False
+
+    # save_dir = Path("uniform") / "24_MixTest" / task_code
+    save_dir = Path("uniform") /  task_code
     save_dir.mkdir(exist_ok=True, parents=True)
 
     reward_history = []
     reward_enemy_history = []
+    reward_history_peri = []
+    reward_enemy_history_peri = []
     actor_loss_history = []
     critic_loss_history = []
 
-    red_win_ep = 0
-    blue_win_ep = 0
+    win_side_every_100 = []
     red_win_rate = []
     blue_win_rate = []
 
     fig, axs = plt.subplots(2, 2, figsize=(10, 4))
     ax1, ax2, ax3, ax4 = axs[0,0], axs[0,1], axs[1,0], axs[1,1]
 
-    current_task = "task1"
+    current_task = reward_type
 
     for ep in range(episodes + 1):
         ep_start_time = time.time()
@@ -180,7 +208,9 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             # actions = actions.cpu().detach().numpy()
 
             for r in range(env.red_agents):
-                if expert_learn(ep):
+                # action = np.random.random(3) *2 - 1
+                # actions.append(action)
+                if Mix_Method(ep):
                     actions.append(env.induce_step(r))
                 else:
                     obs_tensor = torch.FloatTensor(np.array(obs_n[r])).to(device)
@@ -192,7 +222,9 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
             for b in range(env.blue_agents):
                 # actions = np.vstack([actions, np.random.uniform(-1, 1, size=action_dim)])
                 # actions = np.vstack([actions, np.zeros(3)])
-                actions.append([0, 0, 0])
+                action = np.random.random(3) *2 - 1
+                actions.append(action)
+                # actions.append([0, 0, 0])
 
             # print(actions)
 
@@ -255,15 +287,22 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
 
         ep_end_time = time.time()
         reward_history.append(episode_reward)
+        reward_history_peri.append(np.mean(reward_history[-100:]))
         reward_enemy_history.append(episode_reward_enemy)
+        reward_enemy_history_peri.append(np.mean(reward_enemy_history[-100:]))
 
         outcome = env.decide_outcome()
+        if len(win_side_every_100)>=100:
+            win_side_every_100.pop(0)
         if 'red' in outcome:
-            red_win_ep += 1
+            win_side_every_100.append(1)
         elif 'blue' in outcome:
-            blue_win_ep += 1
-        red_win_rate.append(red_win_ep / (ep+1))
-        blue_win_rate.append(blue_win_ep / (ep+1))
+            win_side_every_100.append(-1)
+        else:
+            win_side_every_100.append(0)
+
+        red_win_rate.append(win_side_every_100.count(1) / len(win_side_every_100))
+        blue_win_rate.append(win_side_every_100.count(-1) / len(win_side_every_100))
 
         # noise_scale *= noise_decay
         if ep%10==0:
@@ -278,32 +317,37 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
         env.save_and_clear(ep, save_dir / f"record_part_{ep//100}.jsonl")
         env.save_and_clear_rewards(ep, save_dir / f"reward_part_{ep//100}.csv")
 
-        ax1.clear()
-        ax1.plot(reward_history, label='Red Reward', color='red')
-        ax1.plot(reward_enemy_history, label='Blue Reward', color='blue')
-        ax1.set_title("Average Reward")
-        ax1.legend()
 
-        ax2.clear()
-        ax2.plot(red_win_rate, label='Red Win Rate', color='red')
-        ax2.plot(blue_win_rate, label='Blue Win Rate', color='blue')
-        ax2.set_title('Win rate')
-        ax2.legend()
 
-        ax3.clear()
-        ax3.plot(actor_loss_history, label='Actor Loss', color='red')
-        ax3.set_title('Actor Loss')
-        ax3.legend()
-
-        ax4.clear()
-        ax4.plot(critic_loss_history, label='Critic Loss', color='green')
-        ax4.set_title('Critic Loss')
-        ax4.legend()
-
-        plt.tight_layout()
-        if ep % 100 == 0:
+        save_pic_interval = 200 if episodes>=2000 else 100
+        if ep % save_pic_interval == 0:
             # torch.save(actor.state_dict(), save_dir / f"actor_ep{ep}.pth")
             # torch.save(critic.state_dict(), save_dir / f"critic_ep{ep}.pth")
+
+            ax1.clear()
+            ax1.plot(reward_enemy_history_peri, label='Blue Reward', color='blue')        
+            ax1.plot(reward_history_peri, label='Red Reward', color='red')
+            ax1.set_title("Average Reward")
+            ax1.legend()
+
+            ax2.clear()
+            ax2.plot(blue_win_rate, label='Blue Win Rate', color='blue')        
+            ax2.plot(red_win_rate, label='Red Win Rate', color='red')
+            ax2.set_title('Win rate')
+            ax2.legend()
+
+            ax3.clear()
+            ax3.plot(actor_loss_history, label='Actor Loss', color='red')
+            ax3.set_title('Actor Loss')
+            ax3.legend()
+
+            ax4.clear()
+            ax4.plot(critic_loss_history, label='Critic Loss', color='green')
+            ax4.set_title('Critic Loss')
+            ax4.legend()
+
+            plt.tight_layout()
+
             plt.savefig(save_dir / f"figure_ep{ep}.png")
 
     return
@@ -313,19 +357,48 @@ def train_curriculum(env, actor_lr=1e-4, critic_lr=1e-3, noise_scale=0.2, noise_
 if __name__ == "__main__":
 
     # task_series = "F_commu"7
-    task_code = "24_Correct"
+    # task_code = "24_Correct"
 
     env = BattleEnv(red_agents=3,
                     blue_agents=3,
                     auto_record=False,
-                    developer_tools=True,
+                    developer_tools=False,
                     margin_crash=False,
                     collision_crash=False)
     
     train_curriculum(env,
-                     episodes=2000,
-                     noise_scale=0.3,
+                     episodes=3000,
+                     noise_scale=0.6,
                      noise_decay=0.99,
-                     task_code=task_code,
+                     task_code="30_range_Attack_j", 
                      is_render=False,
-                     dev_render_trail=True)
+                     dev_render_trail=True,
+                     Mix_Method=None,
+                     reward_type='only_shoot')
+
+
+    # task_codes = ["24_Correct_down1", "24_Correct_down2", "24_Correct_down3", "24_Correct_down4", "24_Correct_down5",
+    #               "24_Correct_up1", "24_Correct_up2", "24_Correct_up3", "24_Correct_up4", "24_Correct_up5",
+    #               "24_Correct_pure1", "24_Correct_pure2", "24_Correct_pure3", "24_Correct_pure4", "24_Correct_pure5"]
+    # noises = [0.3, 0.4, 0.5, 0.6, 0]
+    # methods = [expert_learn_A, expert_learn_B, expert_learn_C]
+
+    # for i in range(len(task_codes)):
+    #     if i<10:
+    #         continue
+    #     task_code = task_codes[i]
+    #     noise = noises[i%5]
+    #     method = methods[2]
+    #     train_curriculum(env,
+    #                  episodes=3000,
+    #                  noise_scale=noise,
+    #                  noise_decay=0.99,
+    #                  task_code=task_code,
+    #                  is_render=False,
+    #                  dev_render_trail=True,
+    #                  Mix_Method=method)
+    
+
+    
+
+    

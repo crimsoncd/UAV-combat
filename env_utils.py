@@ -440,7 +440,7 @@ class CurriculumReward:
         self.last_positions = {drone.id: (drone.x, drone.y) for drone in drones}
 
     def _get_enemies(self, drone):
-        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive and (d.x-drone.x)**2+(d.y-drone.y)**2 <= 200**2]
 
     def update_and_return(self):
         rewards = np.zeros(len(self.drones))
@@ -452,6 +452,7 @@ class CurriculumReward:
                 'alive': int(drone.alive),
                 'reward_survive': 0.0,
                 'reward_kill': 0.0,
+                'reward_find_enemy': 0.0,
                 'reward_facing': 0.0,
                 'reward_fire': 0.0,
                 'reward_border': 0.0,
@@ -480,6 +481,11 @@ class CurriculumReward:
                     if not enemy.alive:
                         rewards[idx] += 1.0
                         breakdown['reward_kill'] += 1.0
+
+                # 发现敌人奖励
+                if len(enemies)>0:
+                    rewards[idx] += 0.1
+                    breakdown['reward_find_enemy'] += 0.1
 
                 # 面朝敌人奖励
                 if enemies:
