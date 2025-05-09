@@ -13,6 +13,30 @@ MAP_SIZE_1 = 750
 FIRE_RANGE = 120
 RADIUS = 200
 
+ATTACK_ALPHA = np.pi / 2
+ATTACK_R = 100
+
+
+def is_in_sector(point1, point2, orientation, alpha=ATTACK_ALPHA, r=ATTACK_R):
+
+    # 计算两点之间的距离
+    dx = point1[0] - point2[0]
+    dy = point1[1] - point2[1]
+    distance_sq = dx**2 + dy**2
+    
+    # 首先检查是否在半径范围内
+    if distance_sq > r**2:
+        return False
+    
+    angle = math.atan2(dy, dx)
+    if angle < 0:
+        angle += 2 * math.pi
+    angle_diff = abs(angle - orientation)
+    angle_diff = min(angle_diff, 2 * math.pi - angle_diff)
+    
+    return angle_diff <= alpha / 2
+
+
 
 # Small utils
 def rewind(input_num, lower_bound, upper_bound, maintain_int=True):
@@ -422,10 +446,6 @@ class DroneRewardSecond:
 
     def get_reward_log(self):
         """返回奖励日志（用于绘图或后期分析）"""
-        # for breakdown in self.reward_breakdown_log:
-        #     for key in breakdown:
-        #         print(key, breakdown[key], type(breakdown[key]))
-        #     exit(9)
         return self.reward_breakdown_log
     
 
@@ -543,3 +563,76 @@ class CurriculumReward:
 
     def get_reward_log(self):
         return self.reward_breakdown_log
+
+
+
+class DroneRewardSector:
+    def __init__(self, drones, actions, debug=False):
+        self.drones = drones
+        self.actions = actions
+        self.debug = debug
+        self.reward_log = []
+
+    def _get_enemies(self, drone):
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
+
+    def _get_enemies_in_sight(self, drone):
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive and (d.x-drone.x)**2+(d.y-drone.y)**2 <= RADIUS**2]
+
+    def _in_sector(self, enemy, drone):
+        # 判断是否在扇形区域（你应已有此函数）
+        self_posi = (drone.x, drone.y)
+        enemy_posi = (enemy.x, enemy.y)
+        return is_in_sector(enemy_posi, self_posi, drone.orientation)
+
+    def update_and_return(self):
+        rewards = np.zeros(len(self.drones))
+
+        for idx, drone in enumerate(self.drones):
+            reward = 0.0
+            if not drone.alive:
+                rewards[idx] = -1.0
+                self.reward_log.append({'id': drone.id, 'total': -1.0})
+                continue
+
+            # reward += 0.1  # 存活奖励
+
+            enemies = self._get_enemies_in_sight(drone)
+            if enemies:
+                nearest = min(enemies, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
+                dist = math.hypot(nearest.x - drone.x, nearest.y - drone.y)
+                target_angle = math.atan2(nearest.y - drone.y, nearest.x - drone.x)
+                angle_diff = abs((drone.orientation - target_angle) % (2 * math.pi))
+
+                # 距离 shaping：靠近敌人（非盲目冲刺）
+                if 100 < dist < 400:
+                    reward += 0.1 * (1 - abs(dist - 250) / 150)
+
+                # 面向敌人奖励
+                reward += 0.1 * (1 - angle_diff / math.pi)
+
+                # 惩罚：暴露在敌人扇形攻击范围
+                for enemy in enemies:
+                    if self._in_sector(drone, enemy):
+                        reward += 1.0
+                for enemy in enemies:
+                    if self._in_sector(enemy, drone):
+                        reward -= 0.5
+                        break
+
+            # 边界惩罚
+            if drone.x < 50 or drone.x > MAP_SIZE_0 - 50 or drone.y < 50 or drone.y > MAP_SIZE_1 - 50:
+                reward -= 0.3
+
+            rewards[idx] = reward
+            self.reward_log.append({'id': drone.id, 'total': reward})
+
+            if self.debug:
+                print(f"[Drone {drone.id}] Reward: {reward:.3f}")
+
+        return rewards
+
+    def get_reward_log(self):
+        return self.reward_log
+
+

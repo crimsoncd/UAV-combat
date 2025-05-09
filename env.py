@@ -130,6 +130,9 @@ class BattleEnv:
         # 导弹列表
         self.missiles = []
         self._init_missles()
+
+        # 维护胜点
+        self.victory_point = [0.0, 0.0]
         
         # 渲染相关
         self.screen = None
@@ -188,6 +191,7 @@ class BattleEnv:
         for missile in self.missiles:
             missile._reset()
         self.battle_idx = 0
+        self.victory_point = [0.0, 0.0]
         if self.develop:
             self.trail_blue = []
             self.trail_red = []

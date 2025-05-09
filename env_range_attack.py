@@ -20,11 +20,13 @@ MAX_ANGLE_ACCE = np.pi / 32
 MAP_SIZE_0 = 750
 MAP_SIZE_1 = 750
 
+RADIUS = 200
+
 ATTACK_ALPHA = np.pi / 2
 ATTACK_R = 100
 
 
-def is_in_sector(point1, point2, orientation, alpha, r):
+def is_in_sector(point1, point2, orientation, alpha=ATTACK_ALPHA, r=ATTACK_R):
 
     # 计算两点之间的距离
     dx = point1[0] - point2[0]
@@ -59,6 +61,28 @@ def draw_fan_sector(surface, center, orientation, alpha, radius, color, num_poin
         point_list.append((x, y))
 
     pygame.draw.polygon(surface, color, point_list)
+
+
+def relative_polar(x0, y0, x1, y1, orientation=math.pi / 2, standard=False):
+
+    dx = x1 - x0
+    dy = y1 - y0
+    
+    r = math.sqrt(dx**2 + dy**2)  # 半径
+    theta_raw = math.atan2(dy, dx)  # 原始角度（相对于 x 轴）
+    theta = theta_raw - orientation  # 调整后的角度（以 orientation 为基准）
+    
+    # 确保角度在 [-π, π] 范围内
+    if theta < -math.pi:
+        theta += 2 * math.pi
+    elif theta > math.pi:
+        theta -= 2 * math.pi
+
+    if standard:
+        r = r / (MAP_SIZE_0**2 + MAP_SIZE_1**2)
+        theta = theta / math.pi
+    
+    return [r, theta]
 
 
 
@@ -172,6 +196,8 @@ class BattleEnv:
         # 导弹列表
         self.missiles = []
         self._init_missles()
+
+        self.victory_point = [0.0, 0.0]
         
         # 渲染相关
         self.screen = None
@@ -230,6 +256,7 @@ class BattleEnv:
         for missile in self.missiles:
             missile._reset()
         self.battle_idx = 0
+        self.victory_point = [0.0, 0.0]
         if self.develop:
             self.trail_blue = []
             self.trail_red = []
@@ -245,31 +272,25 @@ class BattleEnv:
             state += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         return np.array(state, dtype=np.float32)
     
-    def _get_obs(self, idx):
-        # obs = []
-        # for drone in self.drones:
-        #     if drone.teamcode == self.drones[idx].teamcode:
-        #         obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
-        #     else:
-        #         if (drone.x-self.drones[idx].x)**2 + (drone.y-self.drones[idx].y)**2 <= 200**2:
-        #             obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
-        #         else:
-        #             obs += [0, 0, 0, 0, 0, 0]
-        # for missile in self.missiles:
-        #     obs += [missile.x, missile.y, missile.orientation, int(missile.exist)]
+    def _get_obs(self, idx, max_enemy_obs=3):
         obs = []
         drone = self.drones[idx]
         # Self
-        obs += [drone.x, drone.y, drone.alive, drone.v, drone.w, drone.orientation]
+        obs += [drone.x / MAP_SIZE_0, drone.y / MAP_SIZE_1,
+                drone.alive,
+                drone.v / MAX_SPEED, drone.w / MAX_ANGLE_SPEED,
+                drone.orientation / (np.pi)]
         # Enemy
         # enemies = self._get_enemy_in_sight(idx)
-        enemies = self._get_enemies(idx)
-        if len(enemies) > 0:
-            x, y = drone.x, drone.y
-            enemies.sort(key=lambda d: (d.x - x)**2 + (d.y - y)**2)
-            obs += [enemies[0].x, enemies[0].y]
-        else:
-            obs += [0, 0]
+        # enemies = self._get_enemies(idx)
+        visible_enemies = self._get_enemy_in_ally_sight(idx)
+        for i in range(max_enemy_obs):
+            if i < len(visible_enemies):
+                e = visible_enemies[i]
+                r, theta = relative_polar(drone.x, drone.y, e.x, e.y, standard=True, orientation=drone.orientation)
+                obs += [1.0, r, theta]
+            else:
+                obs += [0.0, 0.0, 0.0]  # 不可观测敌人
         return np.array(obs, dtype=np.float32)
     
     def _get_obs_all(self):
@@ -278,6 +299,18 @@ class BattleEnv:
             obs.append(self._get_obs(i))
         return obs
     
+    def _update_victory_point(self):
+        for drone in self.drones:
+            if drone.alive:
+                self.victory_point[drone.teamcode] += 1.0
+            enemies = self._get_enemy_in_sight(drone.id)
+            if enemies:
+                nearest = min(enemies, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
+                # dist = math.hypot(nearest.x - drone.x, nearest.y - drone.y)
+                target_angle = math.atan2(nearest.y - drone.y, nearest.x - drone.x)
+                angle_diff = abs((drone.orientation - target_angle) % (2 * math.pi))
+                self.victory_point[drone.teamcode] += 0.1 * (1 - angle_diff / math.pi)
+    
     def _get_all_drones(self):
         return self.drones
     
@@ -285,13 +318,30 @@ class BattleEnv:
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
         return target_drone
     
+    def _get_allies(self, idx):
+        drone = self.drones[idx]
+        return [d for d in self.drones if d.teamcode == drone.teamcode and d.alive]
+    
     def _get_enemies(self, idx):
         drone = self.drones[idx]
         return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive]
     
     def _get_enemy_in_sight(self, idx):
         drone = self.drones[idx]
-        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive and (d.x-drone.x)**2+(d.y-drone.y)**2 <= 200**2]
+        return [d for d in self.drones if d.teamcode != drone.teamcode and d.alive and (d.x-drone.x)**2+(d.y-drone.y)**2 <= RADIUS**2]
+    
+    def _get_enemy_in_ally_sight(self, idx):
+        allies = self._get_allies(idx)
+        enemies = self._get_enemies(idx)
+
+        enemies_in_sight = []
+        for e in enemies:
+            if e.alive:
+                for a in allies:
+                    if (e.x - a.x)**2 + (e.y - a.y)**2 <= RADIUS **2:
+                        enemies_in_sight.append(e)
+                        break
+        return enemies_in_sight
     
     def _get_random_drone_position(self, team=0):
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
@@ -376,9 +426,16 @@ class BattleEnv:
     def decide_outcome(self):
         red_alive = len([d for d in self.drones if d.teamcode==0 and d.alive==True])
         blue_alive = len([d for d in self.drones if d.teamcode==1 and d.alive==True])
-        if red_alive == blue_alive:
-            return 'draw'
-        return 'red win' if red_alive > blue_alive else 'blue win'
+        # if red_alive == blue_alive:
+        #     return 'draw'
+        # return 'red win' if red_alive > blue_alive else 'blue win'
+        return 'blue win' if blue_alive > red_alive else 'red win'
+        # if self.victory_point[0] > self.victory_point[1]:
+        #     return 'red win'
+        # elif self.victory_point[0] < self.victory_point[1]:
+        #     return 'blue win'
+        # else:
+        #     return 'draw'
         
 
 
@@ -422,18 +479,22 @@ class BattleEnv:
             for enemy in enemies:
                 drone_posi = (drone.x, drone.y)
                 enemy_posi = (enemy.x, enemy.y)
-                if is_in_sector(drone_posi, enemy_posi, drone.orientation, ATTACK_ALPHA, ATTACK_R):
+                if is_in_sector(drone_posi, enemy_posi, drone.orientation, ATTACK_ALPHA, ATTACK_R) and enemy.teamcode==1:
                     enemy.alive = False
                     shoot_rewards[drone.id] += 10
                     shoot_rewards[enemy.id] -= 10
+                if is_in_sector(enemy_posi, drone_posi, enemy.orientation, ATTACK_ALPHA, ATTACK_R) and enemy.teamcode==1:
+                    drone.alive = False
+                    shoot_rewards[drone.id] -= 10
+                    shoot_rewards[enemy.id] += 10
 
             # 靠近敌人
-            enemies_in_sight = self._get_enemy_in_sight(idx)
-            if enemies_in_sight:
-                nearest = min(enemies_in_sight, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
-                dist = math.hypot(nearest.x - drone.x, nearest.y - drone.y)
-                dist_reward = 0.1 * (1 - min(dist / 300, 1.0))
-                shoot_rewards[drone.id] += dist_reward
+            # enemies_in_sight = self._get_enemy_in_sight(idx)
+            # if enemies_in_sight:
+            #     nearest = min(enemies_in_sight, key=lambda e: (e.x - drone.x) ** 2 + (e.y - drone.y) ** 2)
+            #     dist = math.hypot(nearest.x - drone.x, nearest.y - drone.y)
+            #     dist_reward = 0.1 * (1 - min(dist / 300, 1.0))
+            #     shoot_rewards[drone.id] += dist_reward
             
             # 处理发射
             # if action_shoot and drone.fire_cooltime <= 0:
@@ -457,12 +518,17 @@ class BattleEnv:
         #             missile._collide()
         #             drone.alive = False
 
+        self._update_victory_point()
+        
         TypeReward = None
         if reward_type==None or reward_type=="half":
             TypeReward = env_utils.CurriculumReward(self.drones, actions, "task1")
             rewards = TypeReward.update_and_return()
         elif 'task' in reward_type:
             TypeReward = env_utils.CurriculumReward(self.drones, actions, reward_type)
+            rewards = TypeReward.update_and_return()
+        elif 'sector' in reward_type:
+            TypeReward = env_utils.DroneRewardSector(self.drones, actions)
             rewards = TypeReward.update_and_return()
         elif 'only_shoot' in reward_type:
             rewards = shoot_rewards
@@ -514,8 +580,8 @@ class BattleEnv:
         
         # 绘制无人机
         for drone in self.drones:
-            if not drone.alive:
-                continue
+            # if not drone.alive:
+            #     continue
             color = self.color_red_team if drone.team == 'red' else self.color_blue_team
             # pygame.draw.circle(self.screen, color, (int(drone.x), int(drone.y)), 10)
             # print(drone.orientation)
@@ -560,7 +626,9 @@ if __name__ == "__main__":
 
     import time
 
-    env = BattleEnv(red_agents=1, blue_agents=1, auto_record=False)
+    num_agents = 3
+
+    env = BattleEnv(red_agents=num_agents, blue_agents=num_agents, auto_record=False, developer_tools=True)
     state = env.reset()
 
     step = 0
@@ -569,19 +637,25 @@ if __name__ == "__main__":
         # 生成随机动作（连续动作空间）
         actions = []
         
-        # 一个飞机随机飞行
-        # actions.append(np.random.random(3) * 2 - 1)
-        actions.append([0, 0, 0])
 
+
+        for i in range(num_agents):
         # 一个飞机使用策略
-        all_drones = env._get_all_drones()
-        self_drone = env._get_random_drone(1)
-        target_x, target_y = env._get_random_drone_position(0)
-        # actions.append(env_utils.control_strategy(self_drone, target_x, target_y))
-        # actions.append(env_utils.control_to_attack(self_drone, target_x, target_y))
-        # actions.append(env_utils.control_strategy_C(self_drone, target_x, target_y))
-        actions.append(env_utils.control_strategy_Expert(self_drone, all_drones))
-        
+            self_drone = env.drones[i]
+            all_drones = env._get_all_drones()
+            # self_drone = env._get_random_drone(1)
+            # target_x, target_y = env._get_random_drone_position(0)
+            # actions.append(env_utils.control_strategy(self_drone, target_x, target_y))
+            # actions.append(env_utils.control_to_attack(self_drone, target_x, target_y))
+            # actions.append(env_utils.control_strategy_C(self_drone, target_x, target_y))
+            actions.append(env_utils.control_strategy_Expert(self_drone, all_drones))
+
+        for i in range(num_agents):
+            # 一个飞机随机飞行
+            actions.append(np.random.random(3) * 2 - 1)
+            # actions.append([0, 0, 0])
+
+
         # print("actions:", actions)
         
         # 执行动作
@@ -589,7 +663,8 @@ if __name__ == "__main__":
         step += 1
         
         # 渲染
-        env.render()
+        env.render(show_trail=True)
+        time.sleep(0.05)
         
         # 检查终止条件
         if done:
