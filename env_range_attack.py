@@ -116,6 +116,8 @@ class Drone:
         # Formalize
         self.v = float(self.v)
         self.w = float(self.w)
+        # self.x = float(self.x)
+        # self.y = float(self.y)
 
         # alpha' = alpha + w * t
         self.orientation += self.w
@@ -124,6 +126,9 @@ class Drone:
         # Change in position
         self.x += self.v * np.cos(self.orientation)
         self.y += self.v * np.sin(self.orientation)
+
+        self.x = float(self.x)
+        self.y = float(self.y)
 
 
 
@@ -272,7 +277,22 @@ class BattleEnv:
             state += [missile.x, missile.y, missile.orientation, int(missile.exist)]
         return np.array(state, dtype=np.float32)
     
-    def _get_obs(self, idx, max_enemy_obs=3):
+    def _search_enemies(self, max_enemy_obs=3):
+        search = []
+        for idx in range(self.red_agents):
+            local_search = []
+            visible_enemies = self._get_enemy_in_ally_sight(idx)
+            for i in range(max_enemy_obs):
+                if i < len(visible_enemies):
+                    e = visible_enemies[i]
+                    local_search.append((e.x, e.y))
+                else:
+                    local_search.append(None)
+            search.append(local_search)
+        return search
+
+    
+    def _get_obs(self, idx, max_enemy_obs=3, full=False):
         obs = []
         drone = self.drones[idx]
         # Self
@@ -283,20 +303,37 @@ class BattleEnv:
         # Enemy
         # enemies = self._get_enemy_in_sight(idx)
         # enemies = self._get_enemies(idx)
+        if full:
+            enemies = self._get_enemies(idx)
+            for e in enemies:
+                obs += [1.0, e.x, e.y]
+            return obs
+        
         visible_enemies = self._get_enemy_in_ally_sight(idx)
         for i in range(max_enemy_obs):
             if i < len(visible_enemies):
                 e = visible_enemies[i]
-                r, theta = relative_polar(drone.x, drone.y, e.x, e.y, standard=True, orientation=drone.orientation)
-                obs += [1.0, r, theta]
+                obs += [1.0, e.x, e.y]
+                # r, theta = relative_polar(drone.x, drone.y, e.x, e.y, standard=True, orientation=drone.orientation)
+                # obs += [1.0, r, theta]
             else:
                 obs += [0.0, 0.0, 0.0]  # 不可观测敌人
         return np.array(obs, dtype=np.float32)
     
-    def _get_obs_all(self):
+    def _get_obs_all(self, max_enemy_obs=3, full=False):
         obs = []
         for i in range(self.total_agents):
-            obs.append(self._get_obs(i))
+            obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full))
+        return obs
+    
+    def _get_obs_side(self, side=0, max_enemy_obs=3, full=False):
+        obs = []
+        if side==0:
+            side_range = [_ for _ in range(self.red_agents)]
+        else:
+            side_range = [_+self.red_agents for _ in range(self.blue_agents)]
+        for i in side_range:
+            obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full))
         return obs
     
     def _update_victory_point(self):
@@ -342,6 +379,10 @@ class BattleEnv:
                         enemies_in_sight.append(e)
                         break
         return enemies_in_sight
+    
+    def _get_enemies_position(self, side=0):
+        positions = [(d.x, d.y) for d in self.drones if d.teamcode!=side]
+        return positions
     
     def _get_random_drone_position(self, team=0):
         target_drone = np.random.choice([u for u in self.drones if u.teamcode==team])
@@ -426,10 +467,10 @@ class BattleEnv:
     def decide_outcome(self):
         red_alive = len([d for d in self.drones if d.teamcode==0 and d.alive==True])
         blue_alive = len([d for d in self.drones if d.teamcode==1 and d.alive==True])
-        # if red_alive == blue_alive:
-        #     return 'draw'
-        # return 'red win' if red_alive > blue_alive else 'blue win'
-        return 'blue win' if blue_alive > red_alive else 'red win'
+        if red_alive == blue_alive:
+            return 'draw'
+        return 'red win' if red_alive > blue_alive else 'blue win'
+        # return 'blue win' if blue_alive > red_alive else 'red win'
         # if self.victory_point[0] > self.victory_point[1]:
         #     return 'red win'
         # elif self.victory_point[0] < self.victory_point[1]:
