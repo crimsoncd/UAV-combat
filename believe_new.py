@@ -5,6 +5,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from scipy.stats import multivariate_normal
 
+import itertools
 
 def euclidean_distance(item_a, item_b):
     return np.linalg.norm(np.array(item_a) - np.array(item_b))
@@ -30,10 +31,15 @@ def optimal_matching(A, B):
         col_ind = col_ind[sorted_indices][:5]
 
     # 返回匹配结果
-    matches = [(A[row], B[col]) for row, col in zip(row_ind, col_ind)]
+    matches = [(row, col) for row, col in zip(row_ind, col_ind)]
+
+    # 如果有未匹配的A元素，补上None
+    matched_indices = set(row_ind)
+    for i, a in enumerate(A):
+        if i not in matched_indices:
+            matches.append((i, None))
+
     return matches
-
-
 
 
 
@@ -80,6 +86,7 @@ class EnemyDataPack():
 
 
 class EnemySpyer:
+
     def __init__(self, process_noise=1.0, measurement_noise=1.5):
         # Bayesian Parameter
         self.process_noise = process_noise
@@ -97,40 +104,88 @@ class EnemySpyer:
         mean = np.array([x, y])
         cov = np.diag(initial_uncertainty)
         self.position_belief = multivariate_normal(mean=mean, cov=cov)
+        return [x, y, self.last_v, self.last_o]
 
     def predict(self):
         if self.position_belief is None:
-            return
+            return [0, 0, 0, 0]
         vx, vy = self.last_v*np.cos(self.last_o), self.last_v*np.sin(self.last_o)
         mean = self.position_belief.mean + np.array([vx, vy])
         cov = self.position_belief.cov + np.eye(2) * self.process_noise
         self.position_belief = multivariate_normal(mean=mean, cov=cov)
-        return mean
+        return [mean[0], mean[1], self.last_v, self.last_o]
     
     def update(self, packed_info):
         if self.position_belief is None:
-            self.initialize(packed_info)
+            return self.initialize(packed_info)
 
-        # 观测的置信区域
-        likelihood = multivariate_normal(mean=observation, cov=np.eye(2) * self.measurement_noise)
+        x, y, self.last_v, self.last_o = packed_info
 
-        # 更新后的均值和方差
+        # likelihood = multivariate_normal(mean=[x, y], cov=np.eye(2) * self.measurement_noise)
         prior_mean = self.position_belief.mean
         prior_cov = self.position_belief.cov
-
-        # 卡尔曼增益计算
         kalman_gain = np.dot(prior_cov, np.linalg.inv(prior_cov + np.eye(2) * self.measurement_noise))
-
-        # 融合观测
-        updated_mean = prior_mean + np.dot(kalman_gain, (observation - prior_mean))
+        updated_mean = prior_mean + np.dot(kalman_gain, ([x, y] - prior_mean))
         updated_cov = (np.eye(2) - kalman_gain).dot(prior_cov)
-
-        # 更新信念
         self.position_belief = multivariate_normal(mean=updated_mean, cov=updated_cov)
-        return updated_mean
+
+        return [x, y, self.last_v, self.last_o]
+    
+    def get_data(self):
+        if self.position_belief is None:
+            return [0, 0, 0, 0]
+        x, y = self.position_belief.mean
+        return (x, y, self.last_v, self.last_o)
+    
+    def get_standard_data(self):
+        if self.position_belief is None:
+            return [0, 0, 0, 0]
+        x, y = self.position_belief.mean
+        return (x / MAP_SIZE_0, y / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi)
 
 
 
+class BlackBox():
+
+    def __init__(self, num_enemy=5):
+        self.n = num_enemy
+        self.Pack = EnemyDataPack()
+        self.Spyers = [EnemySpyer() for _ in range(num_enemy)]
+
+    def reset(self):
+        self.Pack = EnemyDataPack()
+        self.Spyers = [EnemySpyer() for _ in range(self.n)]
+
+    def update(self, input_obs):
+
+        self.Pack.Unpack_and_Store(input_obs)
+        packs = self.Pack.Pop()
+
+        # Every pack is a list of (x, y, v, o) (Standardized) or an empty list []
+        if len(packs) == 0:
+            predicts = [self.Spyers[i].predict() for i in range(self.n)]
+            return list(itertools.chain.from_iterable(predicts))
+        
+        # Have some obs: update if there is an obs, else predict
+        r_enemies = [self.Spyers[i].get_standard_data() for i in range(self.n)]
+        r_obs = packs
+        matches = optimal_matching(r_enemies, r_obs)
+        if len(matches) != self.n:
+            raise ValueError("Match outcome is not consistent with number of enemies")
+
+        results = [None] * self.n
+        for match in matches:
+            # print("matching:", match)
+            enemy_idx, pack_idx = match
+            if pack_idx is None:
+                enemy_idx = int(match[0])
+                results[enemy_idx] = self.Spyers[enemy_idx].predict()
+            else:
+                enemy_idx, pack_idx = int(match[0]), int(match[1])
+                results[enemy_idx] = self.Spyers[enemy_idx].update(packs[pack_idx])
+        
+        # print(results)
+        return list(itertools.chain.from_iterable(results))
 
 
 
@@ -151,9 +206,20 @@ class EnemySpyer:
 if __name__=="__main__":
     obs_i = [9, 9, 9, 9, 9, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 3, 3, 5, 4]
     obs_j = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 9, 0, 0, 0, 0, 0, 0]
-    obs_all = [obs_i, obs_j]
-    p = EnemyDataPack()
-    p.Unpack_and_Store(obs_all)
-    print(p.Pop())
+    obs_k = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 9, 0, 0, 0, 0, 0, 0]
+    obs_all = [obs_i, obs_j, obs_k]
+    
+    BB = BlackBox()
+    print(BB.update(obs_all))
+
+    obs_i = [9, 9, 9, 9, 9, 1, 2, 3, 4, 6, 1, 2, 3, 4, 6, 1, 3, 3, 5, 4]
+    obs_j = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 10, 0, 0, 0, 0, 0, 0]
+    obs_k = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 10, 0, 0, 0, 0, 0, 0]
+    obs_all = [obs_i, obs_j, obs_k]
+    print(BB.update(obs_all))
+
+    # [2, 3, 4, 5, 3, 3, 5, 4, 8, 8, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    # [2, 3, 4, 6, 3, 3, 5, 4, 8, 8, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    # Good!
 
 
