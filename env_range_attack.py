@@ -11,19 +11,7 @@ import env_utils
 import os
 import csv
 
-
-MAX_SPEED = 8
-MAX_ANGLE_SPEED = np.pi / 16 
-MAX_ACCELERATE = 4
-MAX_ANGLE_ACCE = np.pi / 32 
-
-MAP_SIZE_0 = 750
-MAP_SIZE_1 = 750
-
-RADIUS = 200
-
-ATTACK_ALPHA = np.pi / 2
-ATTACK_R = 100
+from config import *
 
 
 def is_in_sector(point1, point2, orientation, alpha=ATTACK_ALPHA, r=ATTACK_R):
@@ -292,48 +280,51 @@ class BattleEnv:
         return search
 
     
-    def _get_obs(self, idx, max_enemy_obs=3, full=False):
+    def _get_obs(self, idx, max_enemy_obs=3, full=False, polar=False):
         obs = []
         drone = self.drones[idx]
         # Self
         obs += [drone.x / MAP_SIZE_0, drone.y / MAP_SIZE_1,
-                drone.alive,
+                # drone.alive,
                 drone.v / MAX_SPEED, drone.w / MAX_ANGLE_SPEED,
                 drone.orientation / (np.pi)]
         # Enemy
-        # enemies = self._get_enemy_in_sight(idx)
-        # enemies = self._get_enemies(idx)
         if full:
             enemies = self._get_enemies(idx)
             for e in enemies:
-                obs += [1.0, e.x, e.y]
+                if polar:
+                    coord1, coord2 = relative_polar(drone.x, drone.y, e.x, e.y, standard=True)
+                else:
+                    coord1, coord2 = e.x / MAP_SIZE_0, e.y / MAP_SIZE_1
+                obs += [1.0, coord1, coord2, e.v / MAX_SPEED, e.orientation / (np.pi) ]
+        else:
+            visible_enemies = self._get_enemy_in_ally_sight(idx)
+            for i in range(max_enemy_obs):
+                if i < len(visible_enemies):
+                    e = visible_enemies[i]
+                    if polar:
+                        coord1, coord2 = relative_polar(drone.x, drone.y, e.x, e.y, standard=True)
+                    else:
+                        coord1, coord2 = e.x / MAP_SIZE_0, e.y / MAP_SIZE_1
+                    obs += [1.0, coord1, coord2, e.v / MAX_SPEED, e.orientation / (np.pi) ]
+                else:
+                    obs += [0.0, 0.0, 0.0, 0.0, 0.0]  # 不可观测敌人
             return obs
-        
-        visible_enemies = self._get_enemy_in_ally_sight(idx)
-        for i in range(max_enemy_obs):
-            if i < len(visible_enemies):
-                e = visible_enemies[i]
-                obs += [1.0, e.x, e.y]
-                # r, theta = relative_polar(drone.x, drone.y, e.x, e.y, standard=True, orientation=drone.orientation)
-                # obs += [1.0, r, theta]
-            else:
-                obs += [0.0, 0.0, 0.0]  # 不可观测敌人
-        return np.array(obs, dtype=np.float32)
     
-    def _get_obs_all(self, max_enemy_obs=3, full=False):
+    def _get_obs_all(self, max_enemy_obs=3, full=False, polar=False):
         obs = []
         for i in range(self.total_agents):
-            obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full))
+            obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full, polar=polar))
         return obs
     
-    def _get_obs_side(self, side=0, max_enemy_obs=3, full=False):
+    def _get_obs_side(self, side=0, max_enemy_obs=3, full=False, polar=False):
         obs = []
         if side==0:
             side_range = [_ for _ in range(self.red_agents)]
         else:
             side_range = [_+self.red_agents for _ in range(self.blue_agents)]
         for i in side_range:
-            obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full))
+            obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full, polar=polar))
         return obs
     
     def _update_victory_point(self):

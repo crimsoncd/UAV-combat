@@ -1,0 +1,15 @@
+
+import numpy as np
+
+MAX_SPEED = 8
+MAX_ANGLE_SPEED = np.pi / 16 
+MAX_ACCELERATE = 4
+MAX_ANGLE_ACCE = np.pi / 32 
+
+MAP_SIZE_0 = 750
+MAP_SIZE_1 = 750
+
+RADIUS = 200
+
+ATTACK_ALPHA = np.pi / 2
+ATTACK_R = 100
