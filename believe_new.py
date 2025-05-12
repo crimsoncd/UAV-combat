@@ -104,16 +104,16 @@ class EnemySpyer:
         mean = np.array([x, y])
         cov = np.diag(initial_uncertainty)
         self.position_belief = multivariate_normal(mean=mean, cov=cov)
-        return [x, y, self.last_v, self.last_o]
+        return [1.0, x / MAP_SIZE_0, y / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi]
 
     def predict(self):
         if self.position_belief is None:
-            return [0, 0, 0, 0]
+            return [0, 0, 0, 0, 0]
         vx, vy = self.last_v*np.cos(self.last_o), self.last_v*np.sin(self.last_o)
         mean = self.position_belief.mean + np.array([vx, vy])
         cov = self.position_belief.cov + np.eye(2) * self.process_noise
         self.position_belief = multivariate_normal(mean=mean, cov=cov)
-        return [mean[0], mean[1], self.last_v, self.last_o]
+        return [1.0, mean[0] / MAP_SIZE_0, mean[1] / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi]
     
     def update(self, packed_info):
         if self.position_belief is None:
@@ -129,19 +129,19 @@ class EnemySpyer:
         updated_cov = (np.eye(2) - kalman_gain).dot(prior_cov)
         self.position_belief = multivariate_normal(mean=updated_mean, cov=updated_cov)
 
-        return [x, y, self.last_v, self.last_o]
+        return [1.0, x / MAP_SIZE_0, y / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi]
     
     def get_data(self):
         if self.position_belief is None:
-            return [0, 0, 0, 0]
+            return [0, 0, 0, 0, 0]
         x, y = self.position_belief.mean
-        return (x, y, self.last_v, self.last_o)
+        return [1.0, x / MAP_SIZE_0, y / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi]
     
     def get_standard_data(self):
         if self.position_belief is None:
             return [0, 0, 0, 0]
         x, y = self.position_belief.mean
-        return (x / MAP_SIZE_0, y / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi)
+        return [x / MAP_SIZE_0, y / MAP_SIZE_1, self.last_v / MAX_SPEED, self.last_o / np.pi]
 
 
 
@@ -209,14 +209,16 @@ if __name__=="__main__":
     obs_k = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 9, 0, 0, 0, 0, 0, 0]
     obs_all = [obs_i, obs_j, obs_k]
     
-    BB = BlackBox()
-    print(BB.update(obs_all))
+    BB = BlackBox(5)
+    result1 = BB.update(obs_all)
+    print(len(result1), result1)
 
     obs_i = [9, 9, 9, 9, 9, 1, 2, 3, 4, 6, 1, 2, 3, 4, 6, 1, 3, 3, 5, 4]
     obs_j = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 10, 0, 0, 0, 0, 0, 0]
     obs_k = [9, 9, 9, 9, 9, 1, 3, 3, 5, 4, 1, 8, 8, 10, 0, 0, 0, 0, 0, 0]
     obs_all = [obs_i, obs_j, obs_k]
-    print(BB.update(obs_all))
+    result2 = BB.update(obs_all)
+    print(len(result2), result2)
 
     # [2, 3, 4, 5, 3, 3, 5, 4, 8, 8, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     # [2, 3, 4, 6, 3, 3, 5, 4, 8, 8, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0]

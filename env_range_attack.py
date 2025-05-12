@@ -290,15 +290,18 @@ class BattleEnv:
                 drone.orientation / (np.pi)]
         # Enemy
         if full:
-            enemies = self._get_enemies(idx)
+            enemies = [d for d in self.drones if d.teamcode != drone.teamcode]
             for e in enemies:
-                if polar:
-                    coord1, coord2 = relative_polar(drone.x, drone.y, e.x, e.y, standard=True)
+                if e.alive:
+                    if polar:
+                        coord1, coord2 = relative_polar(drone.x, drone.y, e.x, e.y, standard=True)
+                    else:
+                        coord1, coord2 = e.x / MAP_SIZE_0, e.y / MAP_SIZE_1
+                    obs += [1.0, coord1, coord2, e.v / MAX_SPEED, e.orientation / (np.pi) ]
                 else:
-                    coord1, coord2 = e.x / MAP_SIZE_0, e.y / MAP_SIZE_1
-                obs += [1.0, coord1, coord2, e.v / MAX_SPEED, e.orientation / (np.pi) ]
+                    obs += [0.0, 0.0, 0.0, 0.0, 0.0]
         else:
-            visible_enemies = self._get_enemy_in_ally_sight(idx)
+            visible_enemies = self._get_enemy_in_sight(idx)
             for i in range(max_enemy_obs):
                 if i < len(visible_enemies):
                     e = visible_enemies[i]
@@ -309,7 +312,7 @@ class BattleEnv:
                     obs += [1.0, coord1, coord2, e.v / MAX_SPEED, e.orientation / (np.pi) ]
                 else:
                     obs += [0.0, 0.0, 0.0, 0.0, 0.0]  # 不可观测敌人
-            return obs
+        return obs
     
     def _get_obs_all(self, max_enemy_obs=3, full=False, polar=False):
         obs = []
@@ -326,6 +329,17 @@ class BattleEnv:
         for i in side_range:
             obs.append(self._get_obs(i, max_enemy_obs=max_enemy_obs, full=full, polar=polar))
         return obs
+    
+    def _get_obs_self(self, idx):
+        obs = []
+        drone = self.drones[idx]
+        # Self
+        obs += [drone.x / MAP_SIZE_0, drone.y / MAP_SIZE_1,
+                # drone.alive,
+                drone.v / MAX_SPEED, drone.w / MAX_ANGLE_SPEED,
+                drone.orientation / (np.pi)]
+        return obs
+
     
     def _update_victory_point(self):
         for drone in self.drones:
@@ -482,8 +496,8 @@ class BattleEnv:
                 continue
 
             # [sin alpha, cos alpha, velosity scale, shoot]
-            a, phi, sh = actions[idx]
-            action_shoot = True if sh>0 else False
+            a, phi = actions[idx][0], actions[idx][1]
+            # action_shoot = True if sh>0 else False
 
             drone._update(a * MAX_ACCELERATE, phi * MAX_ANGLE_ACCE)
 
