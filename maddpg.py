@@ -8,7 +8,7 @@ import json
 from collections import deque
 import math
 import os
-from env import BattleEnv
+from env_shoot_attack import BattleEnv
 
 from env_utils import noise_mask
 import time

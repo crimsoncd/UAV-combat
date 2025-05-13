@@ -12,45 +12,7 @@ import os
 import csv
 
 from config import *
-
-ACTION_DIM = 2
-
-
-def is_in_sector(point1, point2, orientation, alpha=ATTACK_ALPHA, r=ATTACK_R):
-
-    # 计算两点之间的距离
-    dx = point1[0] - point2[0]
-    dy = point1[1] - point2[1]
-    distance_sq = dx**2 + dy**2
-    
-    # 首先检查是否在半径范围内
-    if distance_sq > r**2:
-        return False
-    
-    angle = math.atan2(dy, dx)
-    if angle < 0:
-        angle += 2 * math.pi
-    angle_diff = abs(angle - orientation)
-    angle_diff = min(angle_diff, 2 * math.pi - angle_diff)
-    
-    return angle_diff <= alpha / 2
-
-
-def draw_fan_sector(surface, center, orientation, alpha, radius, color, num_points=30):
-
-    x1, y1 = center
-    point_list = [center]
-
-    start_angle = orientation - alpha / 2
-    end_angle = orientation + alpha / 2
-
-    for i in range(num_points + 1):
-        theta = start_angle + i * (end_angle - start_angle) / num_points
-        x = x1 + radius * math.cos(theta)
-        y = y1 + radius * math.sin(theta)
-        point_list.append((x, y))
-
-    pygame.draw.polygon(surface, color, point_list)
+ACTION_DIM = 3
 
 
 def relative_polar(x0, y0, x1, y1, orientation=math.pi / 2, standard=False):
@@ -73,7 +35,6 @@ def relative_polar(x0, y0, x1, y1, orientation=math.pi / 2, standard=False):
         theta = theta / math.pi
     
     return [r, theta]
-
 
 
 
@@ -106,8 +67,6 @@ class Drone:
         # Formalize
         self.v = float(self.v)
         self.w = float(self.w)
-        # self.x = float(self.x)
-        # self.y = float(self.y)
 
         # alpha' = alpha + w * t
         self.orientation += self.w
@@ -116,9 +75,6 @@ class Drone:
         # Change in position
         self.x += self.v * np.cos(self.orientation)
         self.y += self.v * np.sin(self.orientation)
-
-        self.x = float(self.x)
-        self.y = float(self.y)
 
 
 
@@ -499,7 +455,8 @@ class BattleEnv:
 
             # [sin alpha, cos alpha, velosity scale, shoot]
             a, phi = actions[idx][0], actions[idx][1]
-            # action_shoot = True if sh>0 else False
+            sh = actions[idx][2]
+            action_shoot = True if sh>0 else False
 
             drone._update(a * MAX_ACCELERATE, phi * MAX_ANGLE_ACCE)
 
@@ -523,18 +480,18 @@ class BattleEnv:
                         other_drone.alive = False
 
             # 检查攻击范围
-            enemies = self._get_enemies(idx)
-            for enemy in enemies:
-                drone_posi = (drone.x, drone.y)
-                enemy_posi = (enemy.x, enemy.y)
-                if is_in_sector(drone_posi, enemy_posi, drone.orientation, ATTACK_ALPHA, ATTACK_R) and enemy.teamcode==1:
-                    enemy.alive = False
-                    shoot_rewards[drone.id] += 10
-                    shoot_rewards[enemy.id] -= 10
-                if is_in_sector(enemy_posi, drone_posi, enemy.orientation, ATTACK_ALPHA, ATTACK_R) and enemy.teamcode==1:
-                    drone.alive = False
-                    shoot_rewards[drone.id] -= 10
-                    shoot_rewards[enemy.id] += 10
+            # enemies = self._get_enemies(idx)
+            # for enemy in enemies:
+            #     drone_posi = (drone.x, drone.y)
+            #     enemy_posi = (enemy.x, enemy.y)
+            #     if is_in_sector(drone_posi, enemy_posi, drone.orientation, ATTACK_ALPHA, ATTACK_R) and enemy.teamcode==1:
+            #         enemy.alive = False
+            #         shoot_rewards[drone.id] += 10
+            #         shoot_rewards[enemy.id] -= 10
+            #     if is_in_sector(enemy_posi, drone_posi, enemy.orientation, ATTACK_ALPHA, ATTACK_R) and enemy.teamcode==1:
+            #         drone.alive = False
+            #         shoot_rewards[drone.id] -= 10
+            #         shoot_rewards[enemy.id] += 10
 
             # 靠近敌人
             # enemies_in_sight = self._get_enemy_in_sight(idx)
@@ -545,26 +502,27 @@ class BattleEnv:
             #     shoot_rewards[drone.id] += dist_reward
             
             # 处理发射
-            # if action_shoot and drone.fire_cooltime <= 0:
-            #     self.missiles[idx]._shootout(drone.x, drone.y, drone.orientation)
-            #     drone.fire_cooltime = self.fire_cooldown
+            if action_shoot and drone.fire_cooltime <= 0:
+                self.missiles[idx]._shootout(drone.x, drone.y, drone.orientation)
+                drone.fire_cooltime = self.fire_cooldown
             
-            # if drone.fire_cooltime > 0:
-            #     drone.fire_cooltime -= 1
+            if drone.fire_cooltime > 0:
+                drone.fire_cooltime -= 1
 
         # 处理导弹
-        # for missile in self.missiles:
-        #     # 更新位置
-        #     missile._update()
+        for missile in self.missiles:
+            # 更新位置
+            missile._update()
                 
-        #     # 碰撞检测
-        #     for drone in self.drones:
-        #         if (drone.teamcode != missile.teamcode and 
-        #             drone.alive and 
-        #             np.hypot(drone.x-missile.x, drone.y-missile.y) < self.attack_radius):
-        #             shoot_rewards[missile.id] += 1
-        #             missile._collide()
-        #             drone.alive = False
+            # 碰撞检测
+            for drone in self.drones:
+                if (drone.teamcode != missile.teamcode and 
+                    drone.alive and 
+                    np.hypot(drone.x-missile.x, drone.y-missile.y) < self.attack_radius):
+                    shoot_rewards[missile.id] += 10
+                    shoot_rewards[drone.id] -= 10
+                    missile._collide()
+                    drone.alive = False
 
         self._update_victory_point()
         
