@@ -577,12 +577,12 @@ class BattleEnv:
         self.screen.fill((255, 255, 255))
         # self.screen.fill(self.color_darkbg)
 
-        for drone in self.drones:
-            if not drone.alive:
-                continue
-            # 绘制无人机扇形
-            fan_color = (255, 182, 193) if drone.teamcode==0 else (173, 216, 230)
-            draw_fan_sector(self.screen, (drone.x, drone.y), drone.orientation, ATTACK_ALPHA, ATTACK_R, fan_color)
+        # for drone in self.drones:
+        #     if not drone.alive:
+        #         continue
+        #     # 绘制无人机扇形
+        #     fan_color = (255, 182, 193) if drone.teamcode==0 else (173, 216, 230)
+        #     draw_fan_sector(self.screen, (drone.x, drone.y), drone.orientation, ATTACK_ALPHA, ATTACK_R, fan_color)
         
         # 绘制无人机
         for drone in self.drones:

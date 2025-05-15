@@ -2,20 +2,12 @@
 import numpy as np
 import math
 
-MAX_SPEED = 8
-MAX_ANGLE_SPEED = np.pi / 16 
-MAX_ACCELERATE = 4
-MAX_ANGLE_ACCE = np.pi / 32
-
-MAP_SIZE_0 = 750
-MAP_SIZE_1 = 750
-
-FIRE_RANGE = 120
-RADIUS = 200
+from config import *
 
 ATTACK_ALPHA = np.pi / 2
 ATTACK_R = 100
 
+FIRE_RANGE = 50
 
 def is_in_sector(point1, point2, orientation, alpha=ATTACK_ALPHA, r=ATTACK_R):
 
