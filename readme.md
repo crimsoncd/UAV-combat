@@ -33,9 +33,6 @@
   <img src="assets/ReadmePic01.png">
 </p>
 
-<p align="center">
-  <img src="assets/ReadmePic02.png">
-</p>
 
 #### 2. MADDPG (Multi-Agent Deep Deterministic Policy Gradient) 决策算法
 作为整体决策框架，我们采用了业界前沿的**多智能体深度确定性策略梯度算法（MADDPG）**。该算法属于一种基于Actor-Critic框架的强化学习算法，特别适用于处理连续动作空间的问题。
@@ -43,6 +40,11 @@
 *   **集中式训练，分布式执行**：在训练阶段，Critic网络可以获取全局信息（由MABM提供）来指导Actor网络学习；在执行阶段，每个Actor仅依赖自身观测进行决策。
 *   **多智能体协同**：有效解决多智能体环境下的非平稳性问题，促进了智能体之间的协同。
 *   **结合MABM**：我们将MABM模块生成的伪全局观测信息作为Actor网络的一部分输入，显著增强了其在非完全信息环境下的决策能力。
+
+<p align="center">
+  <img src="assets/ReadmePic02.png">
+</p>
+
 
 ## 系统实现与环境
 为了验证我们提出的技术框架，我们从零开始搭建了一个功能完善的二维平面无人机对抗仿真平台。
